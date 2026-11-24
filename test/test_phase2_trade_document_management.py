@@ -275,12 +275,12 @@ class TestPhase2ChecklistAndReadinessEngine(unittest.TestCase):
             eta_date="2026-12-10",
         )
         # Upload and verify 2 docs
-        u_inv = upload_trade_document_version(
-            "IMP-2026-0301", "DOC-INV", "/files/inv.pdf", document_number="INV-301"
+        u_ci = upload_trade_document_version(
+            "IMP-2026-0301", "DOC-CI", "/files/ci.pdf", document_number="CI-301"
         )
-        v_inv = verify_trade_document(u_inv["name"], action="verify", user="ops@example.com")
-        self.assertTrue(v_inv["success"])
-        self.assertEqual(v_inv["status"], "Verified")
+        v_ci = verify_trade_document(u_ci["name"], action="verify", user="ops@example.com")
+        self.assertTrue(v_ci["success"])
+        self.assertEqual(v_ci["status"], "Verified")
 
         u_pl = upload_trade_document_version(
             "IMP-2026-0301", "DOC-PL", "/files/pl.pdf", document_number="PL-301"
@@ -341,11 +341,11 @@ class TestPhase2ChecklistAndReadinessEngine(unittest.TestCase):
             shipping_mode="Ocean",
             eta_date="2026-12-05",
         )
-        u_inv = upload_trade_document_version("IMP-2026-0401", "DOC-INV", "/files/inv401.pdf")
-        v_ok = verify_trade_document(u_inv["name"], action="verify", notes="Approved")
+        u_ci = upload_trade_document_version("IMP-2026-0401", "DOC-CI", "/files/ci401.pdf")
+        v_ok = verify_trade_document(u_ci["name"], action="verify", notes="Approved")
         self.assertEqual(v_ok["status"], "Verified")
 
-        v_rej = verify_trade_document(u_inv["name"], action="reject", notes="Wrong HS code")
+        v_rej = verify_trade_document(u_ci["name"], action="reject", notes="Wrong HS code")
         self.assertEqual(v_rej["status"], "Required")
         self.assertIsNone(v_rej["verified_by"])
 

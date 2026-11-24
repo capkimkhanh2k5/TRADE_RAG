@@ -2601,7 +2601,7 @@ def get_trade_case_overview_data(case_id=None):
     }
 
     # Dynamic live cost summary from costing_engine if cost sheet exists
-    target_case_id = data.get("case_id") or case_id
+    target_case_id = case_id or data.get("case_id")
     if target_case_id and get_case_cost_summary:
         try:
             live_cost = get_case_cost_summary(target_case_id)
