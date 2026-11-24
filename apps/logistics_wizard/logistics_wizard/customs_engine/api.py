@@ -99,11 +99,18 @@ def _get_current_user() -> str:
 
 def _doc_to_dict(doc: Any) -> Dict[str, Any]:
     if isinstance(doc, dict):
-        return dict(doc)
-    d = doc.as_dict() if hasattr(doc, "as_dict") else dict(doc.__dict__)
+        d = dict(doc)
+    elif callable(getattr(doc, "as_dict", None)):
+        d = doc.as_dict()
+    else:
+        d = dict(doc.__dict__)
     items = d.get("items") or []
     d["items"] = [
-        (it.as_dict() if hasattr(it, "as_dict") else dict(it))
+        (
+            dict(it)
+            if isinstance(it, dict)
+            else (it.as_dict() if callable(getattr(it, "as_dict", None)) else dict(it.__dict__))
+        )
         for it in items
     ]
     return d
