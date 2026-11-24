@@ -1,0 +1,4 @@
+[pre_model_sync]
+
+[post_model_sync]
+logistics_wizard.patches.v1_0.update_trade_case_naming_series
