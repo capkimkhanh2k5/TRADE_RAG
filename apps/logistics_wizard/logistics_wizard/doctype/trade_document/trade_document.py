@@ -159,8 +159,10 @@ class TradeDocument(Document):
                     },
                 )
                 self.current_version = next_ver
-                if self.status in ("Required", "Missing"):
+                if self.status in ("Required", "Missing") or (max_ver > 0 and self.status in ("Verified", "Expired")):
                     self.status = "Received"
+                    self.verified_by = None
+                    self.verified_at = None
             else:
                 self.current_version = max(int(getattr(self, "current_version", 0) or 0), max_ver)
         else:
