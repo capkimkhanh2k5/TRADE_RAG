@@ -1,0 +1,248 @@
+{
+ "actions": [],
+ "creation": "2026-11-24 19:48:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "description",
+  "country_of_origin",
+  "col_break_qty",
+  "qty",
+  "uom",
+  "unit_price",
+  "customs_value",
+  "section_hs",
+  "suggested_hs_code",
+  "hs_confidence_score",
+  "hs_source",
+  "hs_legal_basis",
+  "col_break_hs_approval",
+  "hs_approval_status",
+  "approved_hs_code",
+  "approved_by",
+  "approved_at",
+  "approval_notes",
+  "section_taxes",
+  "import_duty_rate",
+  "import_duty_amount",
+  "special_consumption_tax_rate",
+  "special_consumption_tax_amount",
+  "col_break_vat",
+  "vat_rate",
+  "vat_amount",
+  "total_tax_amount",
+  "section_policy",
+  "requires_license",
+  "license_no",
+  "specialized_inspection_type"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Mã hàng hóa (Item)",
+   "options": "Item"
+  },
+  {
+   "fetch_from": "item_code.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tên hàng hóa"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Mô tả kỹ thuật (Specification)"
+  },
+  {
+   "fieldname": "country_of_origin",
+   "fieldtype": "Data",
+   "label": "Xuất xứ (Country of Origin)"
+  },
+  {
+   "fieldname": "col_break_qty",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Số lượng",
+   "reqd": 1
+  },
+  {
+   "default": "Nos",
+   "fieldname": "uom",
+   "fieldtype": "Data",
+   "label": "Đơn vị tính (UOM)"
+  },
+  {
+   "default": "0",
+   "fieldname": "unit_price",
+   "fieldtype": "Currency",
+   "label": "Đơn giá khai báo"
+  },
+  {
+   "default": "0",
+   "fieldname": "customs_value",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Trị giá tính thuế (Customs Value)"
+  },
+  {
+   "fieldname": "section_hs",
+   "fieldtype": "Section Break",
+   "label": "Phân loại Mã HS & Phê duyệt Chuyên viên (HS Governance)"
+  },
+  {
+   "fieldname": "suggested_hs_code",
+   "fieldtype": "Data",
+   "label": "Mã HS đề xuất (Suggested HS)"
+  },
+  {
+   "default": "0",
+   "fieldname": "hs_confidence_score",
+   "fieldtype": "Percent",
+   "label": "Độ tin cậy đề xuất (%)"
+  },
+  {
+   "default": "Manual",
+   "fieldname": "hs_source",
+   "fieldtype": "Select",
+   "label": "Nguồn đề xuất HS",
+   "options": "Manual\nAI/RAG Suggestion\nBroker\nMaster Data"
+  },
+  {
+   "fieldname": "hs_legal_basis",
+   "fieldtype": "Small Text",
+   "label": "Căn cứ pháp lý / Evidence (GIR / Thông tư)"
+  },
+  {
+   "fieldname": "col_break_hs_approval",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "hs_approval_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Trạng thái duyệt HS",
+   "options": "Pending\nProposed\nApproved\nRejected"
+  },
+  {
+   "fieldname": "approved_hs_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Mã HS chính thức (Approved HS)"
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Chuyên viên phê duyệt",
+   "options": "User"
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm phê duyệt"
+  },
+  {
+   "fieldname": "approval_notes",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú thẩm định HS"
+  },
+  {
+   "fieldname": "section_taxes",
+   "fieldtype": "Section Break",
+   "label": "Thuế suất & Số thuế phải nộp (Duty & Taxes)"
+  },
+  {
+   "default": "0",
+   "fieldname": "import_duty_rate",
+   "fieldtype": "Percent",
+   "label": "Thuế suất XNK (%)"
+  },
+  {
+   "default": "0",
+   "fieldname": "import_duty_amount",
+   "fieldtype": "Currency",
+   "label": "Tiền thuế XNK",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "special_consumption_tax_rate",
+   "fieldtype": "Percent",
+   "label": "Thuế suất TTĐB (%)"
+  },
+  {
+   "default": "0",
+   "fieldname": "special_consumption_tax_amount",
+   "fieldtype": "Currency",
+   "label": "Tiền thuế TTĐB",
+   "read_only": 1
+  },
+  {
+   "default": "10",
+   "fieldname": "vat_rate",
+   "fieldtype": "Percent",
+   "label": "Thuế suất VAT (%)"
+  },
+  {
+   "default": "0",
+   "fieldname": "vat_amount",
+   "fieldtype": "Currency",
+   "label": "Tiền thuế VAT",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_tax_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Tổng thuế dòng hàng",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_policy",
+   "fieldtype": "Section Break",
+   "label": "Giấy phép & Kiểm tra chuyên ngành"
+  },
+  {
+   "default": "0",
+   "fieldname": "requires_license",
+   "fieldtype": "Check",
+   "label": "Yêu cầu giấy phép XNK"
+  },
+  {
+   "fieldname": "license_no",
+   "fieldtype": "Data",
+   "label": "Số giấy phép chuyên ngành"
+  },
+  {
+   "default": "None",
+   "fieldname": "specialized_inspection_type",
+   "fieldtype": "Select",
+   "label": "Kiểm tra chuyên ngành",
+   "options": "None\nQuality Inspection\nQuarantine\nFood Safety\nTelecom/ICT\nOther"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-24 19:48:00.000000",
+ "modified_by": "Administrator",
+ "module": "Logistics Wizard",
+ "name": "Customs Declaration Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

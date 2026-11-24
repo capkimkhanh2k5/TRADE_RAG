@@ -1,0 +1,376 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-24 19:48:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_ident",
+  "naming_series",
+  "trade_case",
+  "trade_type",
+  "shipment_tracking",
+  "col_break_ident",
+  "declaration_no",
+  "declaration_type",
+  "customs_office_code",
+  "customs_office_name",
+  "section_workflow",
+  "workflow_status",
+  "customs_lane",
+  "clearance_status",
+  "col_break_dates",
+  "declaration_date",
+  "submitted_at",
+  "clearance_date",
+  "processing_days",
+  "section_compliance",
+  "origin_verified",
+  "customs_value_verified",
+  "co_form",
+  "col_break_policy",
+  "license_status",
+  "inspection_status",
+  "primary_hs_code",
+  "hs_approval_summary",
+  "section_items",
+  "items",
+  "section_totals",
+  "currency",
+  "exchange_rate",
+  "total_customs_value",
+  "col_break_totals",
+  "total_import_duty",
+  "total_special_consumption_tax",
+  "total_vat",
+  "total_duty_tax",
+  "section_notes",
+  "rejection_reason",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_ident",
+   "fieldtype": "Section Break",
+   "label": "Thông tin Định danh Tờ khai Hải quan"
+  },
+  {
+   "default": "CDEC-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Mã Series",
+   "options": "CDEC-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trade_case",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hồ sơ XNK (Trade Case)",
+   "options": "Trade Case",
+   "reqd": 1
+  },
+  {
+   "default": "Import",
+   "fieldname": "trade_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Loại hình",
+   "options": "Import\nExport",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shipment_tracking",
+   "fieldtype": "Link",
+   "label": "Vận đơn liên kết",
+   "options": "Shipment Tracking"
+  },
+  {
+   "fieldname": "col_break_ident",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "declaration_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Số tờ khai VNACCS/VCIS"
+  },
+  {
+   "default": "A11 - Nhập kinh doanh tiêu dùng",
+   "fieldname": "declaration_type",
+   "fieldtype": "Select",
+   "label": "Mã loại hình tờ khai",
+   "options": "A11 - Nhập kinh doanh tiêu dùng\nA12 - Nhập kinh doanh sản xuất\nE31 - Nhập nguyên liệu SXXK\nB11 - Xuất kinh doanh\nE62 - Xuất sản phẩm SXXK\nOther"
+  },
+  {
+   "fieldname": "customs_office_code",
+   "fieldtype": "Data",
+   "label": "Mã Chi cục Hải quan"
+  },
+  {
+   "fieldname": "customs_office_name",
+   "fieldtype": "Data",
+   "label": "Tên Chi cục Hải quan"
+  },
+  {
+   "fieldname": "section_workflow",
+   "fieldtype": "Section Break",
+   "label": "Tiến trình Thông quan & Phân luồng"
+  },
+  {
+   "default": "Preparing",
+   "fieldname": "workflow_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trạng thái quy trình",
+   "options": "Preparing\nReady\nDeclared\nProcessing\nCleared\nRejected",
+   "reqd": 1
+  },
+  {
+   "default": "Not Declared",
+   "fieldname": "customs_lane",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Phân luồng Hải quan",
+   "options": "Not Declared\nGreen\nYellow\nRed"
+  },
+  {
+   "default": "NOT CLEARED",
+   "fieldname": "clearance_status",
+   "fieldtype": "Select",
+   "label": "Trạng thái thông quan",
+   "options": "NOT CLEARED\nCLEARED\nREJECTED",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "declaration_date",
+   "fieldtype": "Date",
+   "label": "Ngày đăng ký tờ khai"
+  },
+  {
+   "fieldname": "submitted_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm truyền tờ khai"
+  },
+  {
+   "fieldname": "clearance_date",
+   "fieldtype": "Date",
+   "label": "Ngày thông quan"
+  },
+  {
+   "default": "0",
+   "fieldname": "processing_days",
+   "fieldtype": "Int",
+   "label": "Số ngày xử lý Hải quan",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_compliance",
+   "fieldtype": "Section Break",
+   "label": "Tuân thủ Xuất xứ, Trị giá & Kiểm tra chuyên ngành"
+  },
+  {
+   "default": "0",
+   "fieldname": "origin_verified",
+   "fieldtype": "Check",
+   "label": "Đã xác minh xuất xứ (C/O)"
+  },
+  {
+   "default": "0",
+   "fieldname": "customs_value_verified",
+   "fieldtype": "Check",
+   "label": "Đã thẩm định trị giá Hải quan"
+  },
+  {
+   "default": "None",
+   "fieldname": "co_form",
+   "fieldtype": "Select",
+   "label": "Mẫu C/O ưu đãi thuế",
+   "options": "None\nForm E (ACFTA)\nForm D (ATIGA)\nForm AK (AKFTA)\nForm AJ (AJCEP)\nEUR.1 (EVFTA)\nCPTPP\nForm B (Non-Preferential)"
+  },
+  {
+   "fieldname": "col_break_policy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "N/A",
+   "fieldname": "license_status",
+   "fieldtype": "Select",
+   "label": "Tình trạng Giấy phép XNK",
+   "options": "N/A\nRequired\nApplied\nApproved"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "inspection_status",
+   "fieldtype": "Select",
+   "label": "Tình trạng Kiểm tra / Kiểm hóa",
+   "options": "Not Required\nPending\nDocument Check\nPhysical Inspection\nPassed\nFailed"
+  },
+  {
+   "fieldname": "primary_hs_code",
+   "fieldtype": "Data",
+   "label": "Mã HS chính",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hs_approval_summary",
+   "fieldtype": "Data",
+   "label": "Tóm tắt phê duyệt HS",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_items",
+   "fieldtype": "Section Break",
+   "label": "Chi tiết Dòng hàng & Phê duyệt Mã HS"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Danh sách mặt hàng khai báo",
+   "options": "Customs Declaration Item"
+  },
+  {
+   "fieldname": "section_totals",
+   "fieldtype": "Section Break",
+   "label": "Tổng hợp Trị giá & Nghĩa vụ Thuế"
+  },
+  {
+   "default": "USD",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Tiền tệ",
+   "options": "Currency"
+  },
+  {
+   "default": "1",
+   "fieldname": "exchange_rate",
+   "fieldtype": "Float",
+   "label": "Tỷ giá tính thuế"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_customs_value",
+   "fieldtype": "Currency",
+   "label": "Tổng trị giá tính thuế",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_import_duty",
+   "fieldtype": "Currency",
+   "label": "Tổng thuế XNK",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_special_consumption_tax",
+   "fieldtype": "Currency",
+   "label": "Tổng thuế TTĐB",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_vat",
+   "fieldtype": "Currency",
+   "label": "Tổng thuế VAT",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_duty_tax",
+   "fieldtype": "Currency",
+   "label": "Tổng số thuế phải nộp",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Ghi chú & Lý do từ chối"
+  },
+  {
+   "fieldname": "rejection_reason",
+   "fieldtype": "Small Text",
+   "label": "Lý do từ chối / Bổ sung hồ sơ"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú nghiệp vụ"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-24 19:48:00.000000",
+ "modified_by": "Administrator",
+ "module": "Logistics Wizard",
+ "name": "Customs Declaration",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
