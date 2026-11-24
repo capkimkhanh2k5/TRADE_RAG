@@ -175,6 +175,37 @@ except ImportError:
         verify_trade_document = None
         scheduled_check_expiring_documents = None
 
+# 7. Module 4: Customs & Trade Compliance (Phase 3)
+try:
+    from logistics_wizard.customs_engine.api import (
+        get_case_customs_status,
+        get_case_customs_declarations,
+        create_customs_declaration,
+        propose_hs_code,
+        approve_hs_code,
+        advance_customs_workflow,
+        scheduled_check_overdue_customs,
+    )
+except ImportError:
+    try:
+        from .customs_engine.api import (
+            get_case_customs_status,
+            get_case_customs_declarations,
+            create_customs_declaration,
+            propose_hs_code,
+            approve_hs_code,
+            advance_customs_workflow,
+            scheduled_check_overdue_customs,
+        )
+    except ImportError:
+        get_case_customs_status = None
+        get_case_customs_declarations = None
+        create_customs_declaration = None
+        propose_hs_code = None
+        approve_hs_code = None
+        advance_customs_workflow = None
+        scheduled_check_overdue_customs = None
+
 @frappe.whitelist(allow_guest=True)
 def sync_aftership(tracking_number: Optional[str] = None, shipment_name: Optional[str] = None) -> Any:
     """
@@ -2616,6 +2647,15 @@ def get_trade_case_overview_data(case_id=None):
             live_docs = get_case_documents_status(target_case_id)
             if live_docs and live_docs.get("total_count", 0) > 0:
                 data["document_readiness"] = live_docs
+        except Exception:
+            pass
+
+    # Dynamic live customs readiness from customs_engine if Customs Declaration exists
+    if target_case_id and get_case_customs_status:
+        try:
+            live_customs = get_case_customs_status(target_case_id)
+            if live_customs and live_customs.get("has_declaration"):
+                data["customs_readiness"] = live_customs
         except Exception:
             pass
 

@@ -53,6 +53,7 @@ doc_events = {
 scheduler_events = {
     "daily": [
         "logistics_wizard.document_engine.api.scheduled_check_expiring_documents",
+        "logistics_wizard.customs_engine.api.scheduled_check_overdue_customs",
     ],
     "hourly": [
         "logistics_wizard.tracking_service.scheduled_scan_stale_shipments",
