@@ -59,6 +59,10 @@ class TradeCase(Document):
         "Critical"
     ]
 
+    IMPORT_NAMING_SERIES = "IMP-.YYYY.-.####"
+    EXPORT_NAMING_SERIES = "EXP-.YYYY.-.####"
+    LEGACY_NAMING_SERIES = "TC-.YYYY.-."
+
     STAGE_GATE_DEFINITIONS = [
         ("GATE_SHIPMENT", "1. Vận đơn đã giao hàng đến đích (ATA Completed)"),
         ("GATE_DOCS", "2. Đủ 100% chứng từ ngoại thương bắt buộc đã duyệt"),
@@ -70,9 +74,53 @@ class TradeCase(Document):
         ("GATE_SETTLEMENT", "8. Đã thanh toán và đối soát đủ hóa đơn NCC & Forwarder")
     ]
 
+    def resolve_naming_series(self):
+        """Enforce IMP/EXP naming series by trade_type while preserving legacy TC-* records."""
+        existing_name = str(getattr(self, "name", "") or "")
+        if existing_name.startswith("TC-"):
+            if not getattr(self, "naming_series", None):
+                self.naming_series = self.LEGACY_NAMING_SERIES
+            return
+
+        current_series = getattr(self, "naming_series", None)
+        if getattr(self, "trade_type", None) == "Export":
+            if not current_series or current_series in (self.IMPORT_NAMING_SERIES, self.LEGACY_NAMING_SERIES):
+                self.naming_series = self.EXPORT_NAMING_SERIES
+        else:
+            if not current_series or current_series in (self.EXPORT_NAMING_SERIES, self.LEGACY_NAMING_SERIES):
+                self.naming_series = self.IMPORT_NAMING_SERIES
+
+    def before_naming(self):
+        self.resolve_naming_series()
+
+    def _sync_order_metadata(self, doctype: str, order_name: str, party_field: str):
+        """Populate party, currency, amount, and company from linked PO or SO if missing."""
+        if not (order_name and frappe and hasattr(frappe, "db") and hasattr(frappe.db, "get_value")):
+            return
+        try:
+            order_data = frappe.db.get_value(
+                doctype,
+                order_name,
+                [party_field, "currency", "grand_total", "company"],
+                as_dict=True,
+            )
+            if order_data and hasattr(order_data, "get"):
+                if not getattr(self, party_field, None):
+                    setattr(self, party_field, order_data.get(party_field))
+                if not getattr(self, "currency", None):
+                    self.currency = order_data.get("currency")
+                if not getattr(self, "order_amount", None):
+                    self.order_amount = order_data.get("grand_total")
+                if not getattr(self, "company", None):
+                    self.company = order_data.get("company")
+        except Exception:
+            pass
+
     def validate(self):
         if not getattr(self, "trade_type", None):
             self.trade_type = "Import"
+
+        self.resolve_naming_series()
 
         if not getattr(self, "status", None):
             self.status = "Active"
@@ -112,26 +160,9 @@ class TradeCase(Document):
         elif getattr(self, "closed_date", None) and not getattr(self, "actual_completion_date", None):
             self.actual_completion_date = self.closed_date
 
-        # Fetch Reference metadata from Purchase Order if linked and not already set
-        if getattr(self, "purchase_order", None) and frappe and hasattr(frappe, "db"):
-            try:
-                po_data = frappe.db.get_value(
-                    "Purchase Order",
-                    self.purchase_order,
-                    ["supplier", "currency", "grand_total", "company"],
-                    as_dict=True
-                )
-                if po_data:
-                    if not getattr(self, "supplier", None):
-                        self.supplier = po_data.get("supplier")
-                    if not getattr(self, "currency", None):
-                        self.currency = po_data.get("currency")
-                    if not getattr(self, "order_amount", None):
-                        self.order_amount = po_data.get("grand_total")
-                    if not getattr(self, "company", None):
-                        self.company = po_data.get("company")
-            except Exception:
-                pass
+        # Fetch Reference metadata from Purchase Order / Sales Order if linked and not already set
+        self._sync_order_metadata("Purchase Order", getattr(self, "purchase_order", None), "supplier")
+        self._sync_order_metadata("Sales Order", getattr(self, "sales_order", None), "customer")
 
         # Populate stage gate checklist items if empty
         self.populate_default_stage_gate_checklist()

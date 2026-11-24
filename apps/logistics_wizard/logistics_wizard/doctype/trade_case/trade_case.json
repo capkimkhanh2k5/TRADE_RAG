@@ -71,11 +71,11 @@
    "label": "Định danh & Tổng quan Hồ sơ (Identification)"
   },
   {
-   "default": "TC-.YYYY.-.",
+   "default": "IMP-.YYYY.-.####",
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Mã Series",
-   "options": "TC-.YYYY.-.",
+   "options": "IMP-.YYYY.-.####\nEXP-.YYYY.-.####\nTC-.YYYY.-.",
    "reqd": 1
   },
   {
