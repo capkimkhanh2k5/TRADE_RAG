@@ -147,6 +147,34 @@ except ImportError:
         audit_case_costs = None
         allocate_and_sync_lcv = None
 
+# 6. Module 3: Trade Document Management (Phase 2)
+try:
+    from logistics_wizard.document_engine.api import (
+        get_case_documents_status,
+        get_case_documents_list,
+        init_case_document_checklist,
+        upload_trade_document_version,
+        verify_trade_document,
+        scheduled_check_expiring_documents,
+    )
+except ImportError:
+    try:
+        from .document_engine.api import (
+            get_case_documents_status,
+            get_case_documents_list,
+            init_case_document_checklist,
+            upload_trade_document_version,
+            verify_trade_document,
+            scheduled_check_expiring_documents,
+        )
+    except ImportError:
+        get_case_documents_status = None
+        get_case_documents_list = None
+        init_case_document_checklist = None
+        upload_trade_document_version = None
+        verify_trade_document = None
+        scheduled_check_expiring_documents = None
+
 @frappe.whitelist(allow_guest=True)
 def sync_aftership(tracking_number: Optional[str] = None, shipment_name: Optional[str] = None) -> Any:
     """
@@ -2579,6 +2607,15 @@ def get_trade_case_overview_data(case_id=None):
             live_cost = get_case_cost_summary(target_case_id)
             if live_cost and live_cost.get("invoices_total", 0) > 0:
                 data["cost_summary"] = live_cost
+        except Exception:
+            pass
+
+    # Dynamic live document readiness from document_engine if Trade Documents exist
+    if target_case_id and get_case_documents_status:
+        try:
+            live_docs = get_case_documents_status(target_case_id)
+            if live_docs and live_docs.get("total_count", 0) > 0:
+                data["document_readiness"] = live_docs
         except Exception:
             pass
 

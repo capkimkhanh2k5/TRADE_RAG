@@ -36,6 +36,9 @@ doctype_js = {
 }
 
 doc_events = {
+    "Trade Case": {
+        "after_insert": "logistics_wizard.document_engine.api.on_trade_case_after_insert"
+    },
     "Shipment Tracking": {
         "validate": "logistics_wizard.api.on_shipment_tracking_validate"
     },
@@ -48,6 +51,9 @@ doc_events = {
 }
 
 scheduler_events = {
+    "daily": [
+        "logistics_wizard.document_engine.api.scheduled_check_expiring_documents",
+    ],
     "hourly": [
         "logistics_wizard.tracking_service.scheduled_scan_stale_shipments",
     ],
