@@ -16,7 +16,13 @@
   "stale_threshold_hours",
   "col_break_2",
   "max_retries",
-  "backoff_base_seconds"
+  "backoff_base_seconds",
+  "section_trade_thresholds",
+  "cost_variance_warning_pct",
+  "cost_variance_critical_pct",
+  "col_break_3",
+  "demurrage_free_days",
+  "doc_urgent_days_before_eta"
  ],
  "fields": [
   {
@@ -89,6 +95,39 @@
    "fieldname": "backoff_base_seconds",
    "fieldtype": "Int",
    "label": "Khoảng trễ thử lại ban đầu (giây)"
+  },
+  {
+   "fieldname": "section_trade_thresholds",
+   "fieldtype": "Section Break",
+   "label": "Ngưỡng Cảnh báo Nghiệp vụ XNK (Trade Compliance & Cost Thresholds)"
+  },
+  {
+   "default": "5",
+   "fieldname": "cost_variance_warning_pct",
+   "fieldtype": "Float",
+   "label": "Ngưỡng cảnh báo lệch chi phí (%)"
+  },
+  {
+   "default": "15",
+   "fieldname": "cost_variance_critical_pct",
+   "fieldtype": "Float",
+   "label": "Ngưỡng nghiêm trọng lệch chi phí (%)"
+  },
+  {
+   "fieldname": "col_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5",
+   "fieldname": "demurrage_free_days",
+   "fieldtype": "Int",
+   "label": "Số ngày miễn lưu bãi mặc định (Free Days)"
+  },
+  {
+   "default": "3",
+   "fieldname": "doc_urgent_days_before_eta",
+   "fieldtype": "Int",
+   "label": "Số ngày cảnh báo thiếu chứng từ trước ETA"
   }
  ],
  "issingle": 1,
