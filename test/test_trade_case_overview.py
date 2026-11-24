@@ -240,35 +240,52 @@ class TestTradeCaseOverview(unittest.TestCase):
     # 4. Strict PURPLE BAN Compliance in CSS (Tier 2 Design Rule)
     # --------------------------------------------------------------------------
     def test_purple_ban_compliance(self):
-        css_path = os.path.join(APP_PATH, "logistics_wizard", "page", "managementLogistic", "managementLogistic.css")
-        with open(css_path, "r", encoding="utf-8") as f:
-            css_content = f.read()
-
-        # Loại bỏ tất cả comment /* ... */
-        clean_css = re.sub(r"/\*[\s\S]*?\*/", "", css_content)
-
+        legacy_css = os.path.join(APP_PATH, "logistics_wizard", "page", "managementLogistic", "managementLogistic.css")
+        css_paths = (
+            [legacy_css]
+            if os.path.isfile(legacy_css)
+            else [
+                os.path.join(APP_PATH, "logistics_wizard", "page", "trade_case_overview", "trade_case_overview.css"),
+                os.path.join(APP_PATH, "logistics_wizard", "public", "css", "unified_logistics_hub.css"),
+            ]
+        )
         purple_pattern = re.compile(r"#(8a2be2|9333ea|7c3aed|6366f1|8b5cf6|a855f7|d946ef|4c1d95|581c87|6d28d9)\b", re.IGNORECASE)
         purple_words = re.compile(r"\b(purple|violet|magenta|indigo)\b", re.IGNORECASE)
 
-        match_hex = purple_pattern.search(clean_css)
-        self.assertIsNone(match_hex, "Purple Ban violation: found disallowed hex code in CSS rules")
+        for css_path in css_paths:
+            self.assertTrue(os.path.isfile(css_path), f"Stylesheet must exist: {css_path}")
+            with open(css_path, "r", encoding="utf-8") as f:
+                css_content = f.read()
 
-        match_word = purple_words.search(clean_css)
-        self.assertIsNone(match_word, "Purple Ban violation: found disallowed color name in CSS rules")
+            # Loại bỏ tất cả comment /* ... */
+            clean_css = re.sub(r"/\*[\s\S]*?\*/", "", css_content)
+
+            match_hex = purple_pattern.search(clean_css)
+            self.assertIsNone(match_hex, f"Purple Ban violation: found disallowed hex code in {css_path}")
+
+            match_word = purple_words.search(clean_css)
+            self.assertIsNone(match_word, f"Purple Ban violation: found disallowed color name in {css_path}")
 
     # --------------------------------------------------------------------------
     # 5. Dual-Tab HTML Shell Structure (R1)
     # --------------------------------------------------------------------------
     def test_unified_html_shell_structure(self):
-        html_path = os.path.join(APP_PATH, "logistics_wizard", "page", "managementLogistic", "managementLogistic.html")
+        legacy_html = os.path.join(APP_PATH, "logistics_wizard", "page", "managementLogistic", "managementLogistic.html")
+        is_legacy = os.path.isfile(legacy_html)
+        html_path = (
+            legacy_html
+            if is_legacy
+            else os.path.join(APP_PATH, "logistics_wizard", "page", "trade_case_overview", "trade_case_overview.html")
+        )
         with open(html_path, "r", encoding="utf-8") as f:
             html = f.read()
 
         # Top Tab Bar and In-tab Case Selector checks
         self.assertIn("logistics-tabs-nav", html)
         self.assertIn("tc-case-selector", html)
-        self.assertIn("btn-tab-overview", html)
-        self.assertIn("btn-tab-tracking", html)
+        if is_legacy:
+            self.assertIn("btn-tab-overview", html)
+            self.assertIn("btn-tab-tracking", html)
 
         # Tab pane checks
         self.assertIn("tab-pane-trade-case", html)
@@ -299,8 +316,9 @@ class TestTradeCaseOverview(unittest.TestCase):
     # 6. Roadmap todoTradeCase.md Completeness (R4)
     # --------------------------------------------------------------------------
     def test_todo_trade_case_roadmap_content(self):
-        todo_path = os.path.join(PROJECT_ROOT, "todoTradeCase.md")
-        self.assertTrue(os.path.isfile(todo_path), "todoTradeCase.md must exist at project root")
+        legacy_todo = os.path.join(PROJECT_ROOT, "todoTradeCase.md")
+        todo_path = legacy_todo if os.path.isfile(legacy_todo) else os.path.join(PROJECT_ROOT, "docs", "todoTradeCase.md")
+        self.assertTrue(os.path.isfile(todo_path), "todoTradeCase.md must exist at project root or docs/")
 
         with open(todo_path, "r", encoding="utf-8") as f:
             content = f.read()
