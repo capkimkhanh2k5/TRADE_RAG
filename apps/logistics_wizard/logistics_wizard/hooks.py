@@ -41,6 +41,20 @@ doc_events = {
     },
     "Purchase Receipt": {
         "before_submit": "logistics_wizard.api.validate_purchase_receipt_shipment_status"
+    },
+    "Delivery Note": {
+        "before_submit": "logistics_wizard.api.validate_delivery_note_shipment_status"
     }
+}
+
+scheduler_events = {
+    "hourly": [
+        "logistics_wizard.tracking_service.scheduled_scan_stale_shipments",
+    ],
+    "cron": {
+        "0 */2 * * *": [
+            "logistics_wizard.tracking_service.scheduled_sync_active_shipments",
+        ],
+    },
 }
 

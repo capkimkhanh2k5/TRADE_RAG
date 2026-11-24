@@ -73,6 +73,14 @@ except ImportError:
     def _log_error(msg, title=None):
         pass
 
+    class MockValidationError(Exception):
+        pass
+
+    def _throw(msg, title=None):
+        raise MockValidationError(msg)
+
+    mock_frappe.ValidationError = MockValidationError
+    mock_frappe.throw = _throw
     mock_frappe.whitelist = _whitelist
     mock_frappe.log_error = _log_error
     mock_frappe.get_doc = lambda *args, **kwargs: None
@@ -152,6 +160,8 @@ def sync_aftership(tracking_number: Optional[str] = None, shipment_name: Optiona
 from .tracking_service import (
     sync_shipment_tracking_data,
     sync_shipment_tracking,
+    scheduled_sync_active_shipments,
+    scheduled_scan_stale_shipments,
     normalize_milestone,
     compute_checkpoint_hash,
     filter_new_checkpoints,
@@ -161,6 +171,17 @@ from .tracking_service import (
     MockTrackingProvider,
     AfterShipProvider,
     DCSA_MILESTONES,
+)
+
+# 5b. Module Master Config: Incoterms 2020, Document Templates, Customs Offices & Thresholds
+from .master_config import (
+    INCOTERMS_2020,
+    DOCUMENT_TYPES_CATALOG,
+    CUSTOMS_OFFICES_VN,
+    DEFAULT_TRADE_THRESHOLDS,
+    get_required_documents_template,
+    validate_incoterm_for_mode,
+    get_trade_thresholds,
 )
 
 # 6. Module Delay Engine: ETA Delay Evaluation & Exception Center (Milestone 2)
@@ -176,13 +197,58 @@ from .delay_engine import (
 
 
 
+def _extract_address_label(addr_name: Optional[str]) -> Optional[str]:
+    if not addr_name:
+        return None
+    try:
+        addr = frappe.get_doc("Address", addr_name)
+        if not addr:
+            return None
+        parts = [p for p in [getattr(addr, "city", None), getattr(addr, "country", None)] if p]
+        if parts:
+            return ", ".join(parts)
+        return getattr(addr, "address_title", None)
+    except Exception:
+        return None
+
+
+def _extract_party_address_label(link_doctype: str, link_name: Optional[str]) -> Optional[str]:
+    if not link_name:
+        return None
+    try:
+        links = frappe.get_all(
+            "Dynamic Link",
+            filters={"link_doctype": link_doctype, "link_name": link_name, "parenttype": "Address"},
+            fields=["parent"],
+        )
+        if links:
+            parent_name = links[0].get("parent") if isinstance(links[0], dict) else getattr(links[0], "parent", None)
+            return _extract_address_label(parent_name)
+    except Exception:
+        pass
+    return None
+
+
+def _extract_warehouse_label(wh_name: Optional[str]) -> Optional[str]:
+    if not wh_name:
+        return None
+    try:
+        wh_doc = frappe.get_doc("Warehouse", wh_name)
+        if not wh_doc:
+            return wh_name
+        label = _extract_address_label(getattr(wh_doc, "address", None))
+        return label or getattr(wh_doc, "warehouse_name", None) or wh_name
+    except Exception:
+        return wh_name
+
+
 @frappe.whitelist(allow_guest=True)
 def get_shipment_tracking(docname: Optional[str] = None,
                           doctype: Optional[str] = None,
                           tracking_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Whitelisted API endpoint for ERPNext / Leaflet Map tracking.
-    Dynamically extracts origin and destination from document / linked Shipment Tracking,
+    Dynamically extracts origin and destination from Import (PO) or Export (SO/DN) / Shipment Tracking,
     invokes routing.py (searoute ocean routing / 3D Great-Circle air routing + Redis cache),
     and returns rich tracking data, real polylines, and GeoJSON.
     """
@@ -190,7 +256,15 @@ def get_shipment_tracking(docname: Optional[str] = None,
     if tracking_id and not docname:
         docname = tracking_id
         if not doctype:
-            doctype = "Purchase Order" if str(docname).startswith("PUR") else "Shipment Tracking"
+            doc_upper = str(docname).upper()
+            if doc_upper.startswith("PUR"):
+                doctype = "Purchase Order"
+            elif doc_upper.startswith(("SAL-ORD", "SO-")):
+                doctype = "Sales Order"
+            elif doc_upper.startswith(("MAT-DN", "DN-")):
+                doctype = "Delivery Note"
+            else:
+                doctype = "Shipment Tracking"
 
     if not docname or not doctype:
         return {"status": "error", "message": "Vui lòng chọn một đơn hàng hoặc mã vận đơn."}
@@ -204,19 +278,55 @@ def get_shipment_tracking(docname: Optional[str] = None,
 
     shipment_doc = None
     po_doc = None
+    so_doc = None
+    dn_doc = None
 
     if doctype == "Purchase Order":
         po_doc = doc
         shipment_name = frappe.db.get_value("Shipment Tracking", {"purchase_order": docname}, "name")
         if shipment_name:
             shipment_doc = frappe.get_doc("Shipment Tracking", shipment_name)
+    elif doctype == "Sales Order":
+        so_doc = doc
+        shipment_name = frappe.db.get_value("Shipment Tracking", {"sales_order": docname}, "name")
+        if shipment_name:
+            shipment_doc = frappe.get_doc("Shipment Tracking", shipment_name)
+    elif doctype == "Delivery Note":
+        dn_doc = doc
+        shipment_name = frappe.db.get_value("Shipment Tracking", {"delivery_note": docname}, "name")
+        so_name = None
+        for item in (getattr(doc, "items", None) or []):
+            so_name = getattr(item, "against_sales_order", None) or (
+                item.get("against_sales_order") if isinstance(item, dict) else None
+            )
+            if so_name:
+                break
+        if not shipment_name and so_name:
+            shipment_name = frappe.db.get_value("Shipment Tracking", {"sales_order": so_name}, "name")
+        if shipment_name:
+            shipment_doc = frappe.get_doc("Shipment Tracking", shipment_name)
+        if so_name and frappe.db.exists("Sales Order", so_name):
+            so_doc = frappe.get_doc("Sales Order", so_name)
     elif doctype == "Shipment Tracking":
         shipment_doc = doc
         po_name = getattr(doc, "purchase_order", None)
         if po_name and frappe.db.exists("Purchase Order", po_name):
             po_doc = frappe.get_doc("Purchase Order", po_name)
+        so_name = getattr(doc, "sales_order", None)
+        if so_name and frappe.db.exists("Sales Order", so_name):
+            so_doc = frappe.get_doc("Sales Order", so_name)
+        dn_name = getattr(doc, "delivery_note", None)
+        if dn_name and frappe.db.exists("Delivery Note", dn_name):
+            dn_doc = frappe.get_doc("Delivery Note", dn_name)
 
-    # 1. Resolve Shipping Method
+    # 1. Resolve Shipping Method & Flow Type
+    flow_type_val = str(getattr(shipment_doc, "flow_type", "") or "").strip().lower() if shipment_doc else ""
+    is_export = (
+        flow_type_val == "export"
+        or (bool(so_doc or dn_doc) and not bool(po_doc))
+        or doctype in ("Sales Order", "Delivery Note")
+    )
+
     method = "Ocean"
     if shipment_doc and getattr(shipment_doc, "shipping_method", None):
         method = shipment_doc.shipping_method
@@ -242,94 +352,82 @@ def get_shipment_tracking(docname: Optional[str] = None,
     if shipment_doc:
         departure_hub = getattr(shipment_doc, "origin_port", None)
         arrival_hub = getattr(shipment_doc, "destination_port", None)
-        dest_facility = getattr(shipment_doc, "warehouse", None) or getattr(shipment_doc, "dest_warehouse", None)
+        if is_export:
+            origin_facility = getattr(shipment_doc, "origin_facility", None) or getattr(shipment_doc, "warehouse", None)
+            dest_facility = getattr(shipment_doc, "dest_warehouse", None)
+        else:
+            dest_facility = getattr(shipment_doc, "warehouse", None) or getattr(shipment_doc, "dest_warehouse", None)
 
-    source_doc = po_doc or doc
-    if source_doc:
-        # Origin Facility: supplier address or supplier dynamic link
-        if not origin_facility and getattr(source_doc, "supplier_address", None):
-            try:
-                s_addr = frappe.get_doc("Address", source_doc.supplier_address)
-                parts = [p for p in [s_addr.city, s_addr.country] if p]
-                if parts:
-                    origin_facility = ", ".join(parts)
-                elif getattr(s_addr, "address_title", None):
-                    origin_facility = s_addr.address_title
-            except Exception:
-                origin_facility = source_doc.supplier_address
-
-        if not origin_facility and getattr(source_doc, "supplier", None):
-            try:
-                links = frappe.get_all(
-                    "Dynamic Link",
-                    filters={"link_doctype": "Supplier", "link_name": source_doc.supplier, "parenttype": "Address"},
-                    fields=["parent"]
+    if is_export:
+        source_doc = dn_doc or so_doc or doc
+        if source_doc:
+            if not origin_facility:
+                wh_name = (
+                    getattr(source_doc, "set_warehouse", None)
+                    or (so_doc and getattr(so_doc, "set_warehouse", None))
+                    or (shipment_doc and getattr(shipment_doc, "warehouse", None))
                 )
-                if links:
-                    s_addr = frappe.get_doc("Address", links[0].parent)
-                    parts = [p for p in [s_addr.city, s_addr.country] if p]
-                    if parts:
-                        origin_facility = ", ".join(parts)
-                    elif getattr(s_addr, "address_title", None):
-                        origin_facility = s_addr.address_title
-            except Exception:
-                pass
+                if wh_name and frappe.db.exists("Warehouse", wh_name):
+                    origin_facility = _extract_warehouse_label(wh_name)
+                if not origin_facility and getattr(source_doc, "company", None):
+                    origin_facility = (
+                        _extract_party_address_label("Company", source_doc.company)
+                        or getattr(source_doc, "company", None)
+                    )
+
+            if not dest_facility:
+                for addr_field in ("shipping_address_name", "shipping_address", "customer_address"):
+                    addr_val = getattr(source_doc, addr_field, None) or (so_doc and getattr(so_doc, addr_field, None))
+                    if addr_val:
+                        dest_facility = _extract_address_label(addr_val)
+                        if dest_facility:
+                            break
+                customer_name = (
+                    getattr(source_doc, "customer", None)
+                    or (so_doc and getattr(so_doc, "customer", None))
+                    or (shipment_doc and getattr(shipment_doc, "customer", None))
+                )
+                if not dest_facility and customer_name:
+                    dest_facility = _extract_party_address_label("Customer", customer_name) or customer_name
 
         if not origin_facility:
-            origin_facility = getattr(source_doc, "supplier", None)
-
-        # Destination Facility: warehouse or shipping address
+            origin_facility = "Kho xuất khẩu nội địa"
         if not dest_facility:
-            wh_name = getattr(source_doc, "set_warehouse", None) or (shipment_doc and getattr(shipment_doc, "warehouse", None))
-            if wh_name and frappe.db.exists("Warehouse", wh_name):
-                try:
-                    wh_doc = frappe.get_doc("Warehouse", wh_name)
-                    if getattr(wh_doc, "address", None) and frappe.db.exists("Address", wh_doc.address):
-                        d_addr = frappe.get_doc("Address", wh_doc.address)
-                        parts = [p for p in [d_addr.city, d_addr.country] if p]
-                        if parts:
-                            dest_facility = ", ".join(parts)
-                        elif getattr(d_addr, "address_title", None):
-                            dest_facility = d_addr.address_title
-                    if not dest_facility:
-                        dest_facility = getattr(wh_doc, "warehouse_name", None) or wh_name
-                except Exception:
-                    dest_facility = wh_name
+            dest_facility = "Kho khách hàng quốc tế"
+    else:
+        source_doc = po_doc or doc
+        if source_doc:
+            # Origin Facility: supplier address or supplier dynamic link
+            if not origin_facility and getattr(source_doc, "supplier_address", None):
+                origin_facility = _extract_address_label(source_doc.supplier_address) or source_doc.supplier_address
 
-            if not dest_facility and getattr(source_doc, "shipping_address", None):
-                if frappe.db.exists("Address", source_doc.shipping_address):
-                    try:
-                        d_addr = frappe.get_doc("Address", source_doc.shipping_address)
-                        parts = [p for p in [d_addr.city, d_addr.country] if p]
-                        if parts:
-                            dest_facility = ", ".join(parts)
-                        elif getattr(d_addr, "address_title", None):
-                            dest_facility = d_addr.address_title
-                    except Exception:
-                        pass
+            if not origin_facility and getattr(source_doc, "supplier", None):
+                origin_facility = _extract_party_address_label("Supplier", source_doc.supplier)
 
-            if not dest_facility and getattr(source_doc, "company", None):
-                try:
-                    c_links = frappe.get_all(
-                        "Dynamic Link",
-                        filters={"link_doctype": "Company", "link_name": source_doc.company, "parenttype": "Address"},
-                        fields=["parent"]
+            if not origin_facility:
+                origin_facility = getattr(source_doc, "supplier", None)
+
+            # Destination Facility: warehouse or shipping address
+            if not dest_facility:
+                wh_name = getattr(source_doc, "set_warehouse", None) or (shipment_doc and getattr(shipment_doc, "warehouse", None))
+                if wh_name and frappe.db.exists("Warehouse", wh_name):
+                    dest_facility = _extract_warehouse_label(wh_name)
+
+                if not dest_facility and getattr(source_doc, "shipping_address", None):
+                    if frappe.db.exists("Address", source_doc.shipping_address):
+                        dest_facility = _extract_address_label(source_doc.shipping_address)
+
+                if not dest_facility and getattr(source_doc, "company", None):
+                    dest_facility = (
+                        _extract_party_address_label("Company", source_doc.company)
+                        or getattr(source_doc, "company", None)
                     )
-                    if c_links:
-                        c_addr = frappe.get_doc("Address", c_links[0].parent)
-                        parts = [p for p in [c_addr.city, c_addr.country] if p]
-                        if parts:
-                            dest_facility = ", ".join(parts)
-                except Exception:
-                    pass
-                if not dest_facility:
-                    dest_facility = getattr(source_doc, "company", None)
 
-    # Dynamic default fallbacks
-    if not origin_facility:
-        origin_facility = "Kho nhà máy xuất phát"
-    if not dest_facility or dest_facility in ["Kho đích nhận hàng", "Kho nhận hàng"]:
-        dest_facility = "cap_khanh_warehouse"
+        # Dynamic default fallbacks
+        if not origin_facility:
+            origin_facility = "Kho nhà máy xuất phát"
+        if not dest_facility or dest_facility in ["Kho đích nhận hàng", "Kho nhận hàng"]:
+            dest_facility = "cap_khanh_warehouse"
 
     target_hub_type = "seaport" if method_norm == "Ocean" else "airport"
 
@@ -430,7 +528,7 @@ def get_shipment_tracking(docname: Optional[str] = None,
         current_location = ahub_name
         current_leg_id = "customs"
         current_vehicle = "Truck"
-    elif check_status == "In Transit" or (doctype == "Purchase Order" and docstatus == 1 and check_status not in ["Draft", "Cancelled"]):
+    elif check_status == "In Transit" or (doctype in ("Purchase Order", "Sales Order", "Delivery Note") and docstatus == 1 and check_status not in ["Draft", "Cancelled"]):
         progress = 0.55
         current_leg_id = "main_haul"
         current_vehicle = "Ship" if method_norm == "Ocean" else "Plane"
@@ -447,7 +545,7 @@ def get_shipment_tracking(docname: Optional[str] = None,
 
         if shipment_doc and getattr(shipment_doc, "transit_route", None) and len(shipment_doc.transit_route) > 1:
             current_location = shipment_doc.transit_route[-1].location
-    elif check_status == "Draft" or (doctype == "Purchase Order" and docstatus in [0, 2]):
+    elif check_status == "Draft" or (doctype in ("Purchase Order", "Sales Order", "Delivery Note") and docstatus in [0, 2]):
         progress = 0.0
         status_text = f"Chờ xuất kho tại nguồn ({origin_name})"
         current_location = origin_name
@@ -1071,18 +1169,24 @@ def get_shipment_tracking_hub_data(shipment: Optional[str] = None,
 
     # Layer 2: Frappe DB ORM (if connected to live bench database)
     elif frappe and hasattr(frappe, "db") and bool(frappe.db):
+        base_fields = [
+            "name", "tracking_number", "container_id", "carrier", "shipping_method",
+            "origin_port", "destination_port", "etd", "atd", "eta", "ata",
+            "status", "is_delayed", "delay_days", "is_stale", "last_synced_at",
+            "vessel_name", "flight_number", "purchase_order", "current_lat", "current_lon",
+            "bill_of_lading", "air_waybill"
+        ]
+        extended_fields = base_fields + [
+            "flow_type", "sales_order", "delivery_note", "customer", "trade_case"
+        ]
         try:
-            fields = [
-                "name", "tracking_number", "container_id", "carrier", "shipping_method",
-                "origin_port", "destination_port", "etd", "atd", "eta", "ata",
-                "status", "is_delayed", "delay_days", "is_stale", "last_synced_at",
-                "vessel_name", "flight_number", "purchase_order", "current_lat", "current_lon",
-                "bill_of_lading", "air_waybill"
-            ]
-            all_shipments = frappe.get_all("Shipment Tracking", fields=fields, order_by="modified desc")
-        except Exception as e:
-            logger.warning(f"Error querying Shipment Tracking for Hub: {e}")
-            all_shipments = []
+            all_shipments = frappe.get_all("Shipment Tracking", fields=extended_fields, order_by="modified desc")
+        except Exception:
+            try:
+                all_shipments = frappe.get_all("Shipment Tracking", fields=base_fields, order_by="modified desc")
+            except Exception as e:
+                logger.warning(f"Error querying Shipment Tracking for Hub: {e}")
+                all_shipments = []
 
         try:
             if hasattr(frappe.db, "table_exists") and frappe.db.table_exists("Shipment Exception"):
@@ -1224,12 +1328,20 @@ def get_shipment_tracking_hub_data(shipment: Optional[str] = None,
     delayed_count = sum(1 for s in all_shipments if s.get("is_delayed") == 1 or s.get("status") == "Delayed")
     stale_count = sum(1 for s in all_shipments if s.get("is_stale") == 1)
 
-    # Filter shipments by Tab and Search Term
+    # Filter shipments by Flow Type, Tab and Search Term
+    flow_filter = kwargs.get("flow_type")
     filtered_shipments: List[Dict[str, Any]] = []
     for s in all_shipments:
         status = s.get("status")
         is_delayed = (s.get("is_delayed") == 1 or status == "Delayed")
         is_stale = (s.get("is_stale") == 1)
+
+        if flow_filter and str(flow_filter).strip().lower() not in ("all", ""):
+            inferred_flow = s.get("flow_type") or (
+                "Export" if (s.get("sales_order") or s.get("delivery_note")) and not s.get("purchase_order") else "Import"
+            )
+            if str(inferred_flow).strip().lower() != str(flow_filter).strip().lower():
+                continue
 
         if filter_status and filter_status != "All":
             norm_filter = str(filter_status).strip().lower()
@@ -1253,6 +1365,11 @@ def get_shipment_tracking_hub_data(shipment: Optional[str] = None,
                 str(s.get("air_waybill") or ""),
                 str(s.get("carrier") or ""),
                 str(s.get("purchase_order") or ""),
+                str(s.get("sales_order") or ""),
+                str(s.get("delivery_note") or ""),
+                str(s.get("customer") or ""),
+                str(s.get("trade_case") or ""),
+                str(s.get("flow_type") or ""),
                 str(s.get("origin_port") or ""),
                 str(s.get("destination_port") or "")
             ]).lower()
@@ -1618,6 +1735,61 @@ def validate_purchase_receipt_shipment_status(doc, method=None):
         pass
 
 
+def validate_delivery_note_shipment_status(doc, method=None):
+    """
+    Hook called before Delivery Note is submitted.
+    In Export workflows, Delivery Note precedes ocean/air departure so Draft/Booked/In Transit
+    are permitted; submission is blocked only if the linked Shipment Tracking is Cancelled.
+    Automatically back-links delivery_note onto the matching Shipment Tracking record.
+    """
+    so_name = None
+    items = doc.get("items") if hasattr(doc, "get") else getattr(doc, "items", None)
+    for item in (items or []):
+        so_val = getattr(item, "against_sales_order", None) or (
+            item.get("against_sales_order") if isinstance(item, dict) else None
+        )
+        if so_val:
+            so_name = so_val
+            break
+
+    dn_name = doc.get("name") if hasattr(doc, "get") else getattr(doc, "name", None)
+    st = None
+    if so_name:
+        st = frappe.db.get_value(
+            "Shipment Tracking",
+            {"sales_order": so_name},
+            ["name", "status", "origin_port"],
+            as_dict=True,
+        )
+    if not st and dn_name:
+        st = frappe.db.get_value(
+            "Shipment Tracking",
+            {"delivery_note": dn_name},
+            ["name", "status", "origin_port"],
+            as_dict=True,
+        )
+
+    if not st:
+        return
+
+    st_status = st.get("status") if isinstance(st, dict) else getattr(st, "status", None)
+    st_name = st.get("name") if isinstance(st, dict) else getattr(st, "name", None)
+    if st_status == "Cancelled":
+        frappe.throw(
+            f"<b>⛔ KHÔNG THỂ DUYỆT XUẤT KHO GIAO HÀNG (DELIVERY NOTE):</b><br><br>"
+            f"Lô hàng xuất khẩu thuộc đơn hàng <b>{so_name or dn_name}</b> đang gắn với Vận đơn <b>{st_name}</b> "
+            f"ở trạng thái <b><span style='color:red'>Cancelled</span></b>.<br>"
+            f"Vui lòng kiểm tra hoặc kích hoạt lại vận đơn trước khi Submit Delivery Note.",
+            title="Kiểm soát Vận đơn Xuất khẩu",
+        )
+
+    if dn_name and st_name:
+        try:
+            frappe.db.set_value("Shipment Tracking", st_name, "delivery_note", dn_name)
+        except Exception:
+            pass
+
+
 __all__ = [
     "WORKFLOW_STEPS",
     "IMPORT_WORKFLOW_STEPS",
@@ -1646,6 +1818,8 @@ __all__ = [
     "sync_transit_route_with_status",
     "on_shipment_tracking_validate",
     "sync_shipment_tracking",
+    "scheduled_sync_active_shipments",
+    "scheduled_scan_stale_shipments",
     "tracking_webhook",
     "DCSA_MILESTONES",
     "normalize_milestone",
@@ -1661,6 +1835,14 @@ __all__ = [
     "get_shipment_tracking_hub_data",
     "sync_shipment_now",
     "validate_purchase_receipt_shipment_status",
+    "validate_delivery_note_shipment_status",
+    "INCOTERMS_2020",
+    "DOCUMENT_TYPES_CATALOG",
+    "CUSTOMS_OFFICES_VN",
+    "DEFAULT_TRADE_THRESHOLDS",
+    "get_required_documents_template",
+    "validate_incoterm_for_mode",
+    "get_trade_thresholds",
     "get_trade_case_overview_data",
     "get_trade_case_list",
     "get_trade_case_detail",
