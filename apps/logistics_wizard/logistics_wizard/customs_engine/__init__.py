@@ -24,6 +24,11 @@ from .workflow_engine import (
     compute_customs_readiness_payload,
     is_declaration_overdue,
 )
+from .ai_hs_advisor import (
+    extract_query_terms,
+    recommend_hs_codes,
+    strip_accents,
+)
 from .api import (
     InMemoryCustomsStore,
     in_memory_customs_store,
@@ -31,6 +36,7 @@ from .api import (
     get_case_customs_declarations,
     create_customs_declaration,
     propose_hs_code,
+    suggest_hs_code_with_rag,
     approve_hs_code,
     advance_customs_workflow,
     sync_trade_case_customs_metrics,
@@ -46,12 +52,16 @@ __all__ = [
     "can_transition",
     "compute_customs_readiness_payload",
     "is_declaration_overdue",
+    "extract_query_terms",
+    "recommend_hs_codes",
+    "strip_accents",
     "InMemoryCustomsStore",
     "in_memory_customs_store",
     "get_case_customs_status",
     "get_case_customs_declarations",
     "create_customs_declaration",
     "propose_hs_code",
+    "suggest_hs_code_with_rag",
     "approve_hs_code",
     "advance_customs_workflow",
     "sync_trade_case_customs_metrics",

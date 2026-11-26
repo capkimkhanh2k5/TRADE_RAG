@@ -27,7 +27,9 @@ except ImportError:
     frappe = None
 
 from logistics_wizard.doctype.customs_declaration.customs_declaration import CustomsDeclaration
+from .ai_hs_advisor import recommend_hs_codes
 from .tax_calculator import is_valid_hs_code, normalize_hs_code
+from .ai_hs_advisor import recommend_hs_codes
 from .workflow_engine import (
     ALLOWED_TRANSITIONS,
     can_transition,
@@ -327,6 +329,130 @@ def propose_hs_code(
         "hs_source": saved["items"][idx - 1].get("hs_source"),
         "hs_approval_status": saved["items"][idx - 1]["hs_approval_status"],
         "hs_approval_summary": saved.get("hs_approval_summary"),
+    }
+
+
+@_frappe_whitelist()
+def suggest_hs_code_with_rag(
+    declaration_name: Optional[str] = None,
+    item_idx: int = 1,
+    item_description: Optional[str] = None,
+    material: Optional[str] = None,
+    function: Optional[str] = None,
+    top_k: int = 5,
+    auto_propose: Any = True,
+    use_llm: Any = False,
+    prefer_postgres: Any = True,
+    corpus_nodes: Optional[List[Dict[str, Any]]] = None,
+    corpus_edges: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Deep AI/RAG HS Recommendation RPC integrated into Module 4's `propose_hs_code` slot.
+    - Queries live PostgreSQL `hs_rag` + Knowledge Graph (+ optional CLIProxyAPI LLM rerank).
+    - If `declaration_name` and `auto_propose` are truthy, writes top suggestion into
+      `Customs Declaration Item` via `propose_hs_code(..., source='AI/RAG Suggestion')`.
+    - STRICT GOVERNANCE: ALWAYS sets `hs_approval_status = 'Proposed'`, NEVER auto-approves.
+    """
+    def _to_bool(val: Any, default: bool = False) -> bool:
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            return bool(val)
+        if isinstance(val, str):
+            return val.strip().lower() in ("1", "true", "yes", "on")
+        return default
+
+    should_propose = _to_bool(auto_propose, True)
+    should_use_llm = _to_bool(use_llm, False)
+    should_prefer_pg = _to_bool(prefer_postgres, True)
+    idx = int(item_idx or 1)
+
+    resolved_desc = (item_description or "").strip()
+    row_snapshot: Optional[Dict[str, Any]] = None
+
+    if declaration_name:
+        use_db = is_frappe_db_ready()
+        if use_db:
+            if not frappe.db.exists("Customs Declaration", declaration_name):
+                return {
+                    "success": False,
+                    "error": f"Không tìm thấy Customs Declaration '{declaration_name}'.",
+                    "requires_human_approval": True,
+                    "automatic_hs_decision": False,
+                }
+            doc = frappe.get_doc("Customs Declaration", declaration_name)
+            items = doc.items or []
+            if idx < 1 or idx > len(items):
+                return {
+                    "success": False,
+                    "error": f"Không tìm thấy dòng hàng thứ {idx} trong {declaration_name}.",
+                    "requires_human_approval": True,
+                    "automatic_hs_decision": False,
+                }
+            row = items[idx - 1]
+            row_snapshot = {
+                "item_code": getattr(row, "item_code", None),
+                "item_name": getattr(row, "item_name", None),
+                "description": getattr(row, "description", None),
+            }
+        else:
+            raw = in_memory_customs_store.get(declaration_name)
+            if not raw:
+                return {
+                    "success": False,
+                    "error": f"Không tìm thấy Customs Declaration '{declaration_name}'.",
+                    "requires_human_approval": True,
+                    "automatic_hs_decision": False,
+                }
+            items = raw.get("items") or []
+            if idx < 1 or idx > len(items):
+                return {
+                    "success": False,
+                    "error": f"Không tìm thấy dòng hàng thứ {idx} trong {declaration_name}.",
+                    "requires_human_approval": True,
+                    "automatic_hs_decision": False,
+                }
+            row_snapshot = dict(items[idx - 1])
+
+        if not resolved_desc and row_snapshot:
+            resolved_desc = " ".join(
+                str(p).strip()
+                for p in (row_snapshot.get("item_name"), row_snapshot.get("description"))
+                if p and str(p).strip()
+            )
+
+    recommendation = recommend_hs_codes(
+        item_description=resolved_desc,
+        material=material,
+        function=function,
+        top_k=int(top_k or 5),
+        use_llm=should_use_llm,
+        prefer_postgres=should_prefer_pg,
+        corpus_nodes=corpus_nodes,
+        corpus_edges=corpus_edges,
+    )
+
+    proposal_result: Optional[Dict[str, Any]] = None
+    primary = recommendation.get("primary_recommendation")
+    if declaration_name and should_propose and recommendation.get("success") and primary:
+        proposal_result = propose_hs_code(
+            declaration_name=declaration_name,
+            item_idx=idx,
+            suggested_hs_code=primary["hs_code"],
+            confidence_score=primary.get("confidence_score"),
+            legal_basis=primary.get("legal_basis"),
+            source="AI/RAG Suggestion",
+        )
+
+    return {
+        **recommendation,
+        "declaration_name": declaration_name,
+        "item_idx": idx,
+        "item_context": row_snapshot,
+        "proposal_applied": bool(proposal_result and proposal_result.get("success")),
+        "proposal_result": proposal_result,
+        "requires_human_approval": True,
+        "automatic_hs_decision": False,
     }
 
 
@@ -667,6 +793,7 @@ __all__ = [
     "get_case_customs_declarations",
     "create_customs_declaration",
     "propose_hs_code",
+    "suggest_hs_code_with_rag",
     "approve_hs_code",
     "advance_customs_workflow",
     "sync_trade_case_customs_metrics",
