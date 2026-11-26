@@ -206,6 +206,65 @@ except ImportError:
         advance_customs_workflow = None
         scheduled_check_overdue_customs = None
 
+# 8. Warehouse Receiving & Inspection (Phase 4 — Section 3.4)
+try:
+    from logistics_wizard.warehouse_engine.api import (
+        get_case_warehouse_status,
+        schedule_warehouse_receiving,
+        record_warehouse_inspection,
+    )
+except ImportError:
+    try:
+        from .warehouse_engine.api import (
+            get_case_warehouse_status,
+            schedule_warehouse_receiving,
+            record_warehouse_inspection,
+        )
+    except ImportError:
+        get_case_warehouse_status = None
+        schedule_warehouse_receiving = None
+        record_warehouse_inspection = None
+
+# 9. Module 6: Exception / Workflow / Action Management (Phase 4)
+try:
+    from logistics_wizard.exception_engine.api import (
+        raise_exception_from_rule,
+        evaluate_case_exceptions,
+        get_case_exceptions_summary,
+        assign_exception,
+        escalate_exception,
+        resolve_exception,
+        create_action_item,
+        complete_action_item,
+        get_case_action_items,
+        scheduled_evaluate_all_active_cases,
+    )
+except ImportError:
+    try:
+        from .exception_engine.api import (
+            raise_exception_from_rule,
+            evaluate_case_exceptions,
+            get_case_exceptions_summary,
+            assign_exception,
+            escalate_exception,
+            resolve_exception,
+            create_action_item,
+            complete_action_item,
+            get_case_action_items,
+            scheduled_evaluate_all_active_cases,
+        )
+    except ImportError:
+        raise_exception_from_rule = None
+        evaluate_case_exceptions = None
+        get_case_exceptions_summary = None
+        assign_exception = None
+        escalate_exception = None
+        resolve_exception = None
+        create_action_item = None
+        complete_action_item = None
+        get_case_action_items = None
+        scheduled_evaluate_all_active_cases = None
+
 @frappe.whitelist(allow_guest=True)
 def sync_aftership(tracking_number: Optional[str] = None, shipment_name: Optional[str] = None) -> Any:
     """
@@ -2656,6 +2715,32 @@ def get_trade_case_overview_data(case_id=None):
             live_customs = get_case_customs_status(target_case_id)
             if live_customs and live_customs.get("has_declaration"):
                 data["customs_readiness"] = live_customs
+        except Exception:
+            pass
+
+    # Dynamic live warehouse readiness from warehouse_engine if receipt exists
+    if target_case_id and get_case_warehouse_status:
+        try:
+            live_wh = get_case_warehouse_status(target_case_id)
+            if live_wh and live_wh.get("has_receipt"):
+                data["warehouse_readiness"] = live_wh
+        except Exception:
+            pass
+
+    # Dynamic live open exceptions & upcoming actions from exception_engine if records exist
+    if target_case_id and get_case_exceptions_summary:
+        try:
+            live_exc = get_case_exceptions_summary(target_case_id)
+            if live_exc and live_exc.get("all_count", 0) > 0:
+                data["open_exceptions"] = live_exc
+        except Exception:
+            pass
+
+    if target_case_id and get_case_action_items:
+        try:
+            live_actions = get_case_action_items(target_case_id)
+            if live_actions:
+                data["upcoming_actions"] = live_actions
         except Exception:
             pass
 

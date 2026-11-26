@@ -76,6 +76,39 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Trade Warehouse Receipt",
+   "link_count": 0,
+   "link_to": "Trade Warehouse Receipt",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment Exception",
+   "link_count": 0,
+   "link_to": "Shipment Exception",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Trade Action Item",
+   "link_count": 0,
+   "link_to": "Trade Action Item",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Costing & Financial Analytics",
@@ -169,7 +202,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-11-24 19:52:00.000000",
+ "modified": "2026-11-26 21:34:00.000000",
  "modified_by": "Administrator",
  "module": "Logistics Wizard",
  "name": "Logistics Wizard",

@@ -43,7 +43,8 @@ doc_events = {
         "validate": "logistics_wizard.api.on_shipment_tracking_validate"
     },
     "Purchase Receipt": {
-        "before_submit": "logistics_wizard.api.validate_purchase_receipt_shipment_status"
+        "before_submit": "logistics_wizard.api.validate_purchase_receipt_shipment_status",
+        "on_submit": "logistics_wizard.warehouse_engine.api.on_purchase_receipt_submit"
     },
     "Delivery Note": {
         "before_submit": "logistics_wizard.api.validate_delivery_note_shipment_status"
@@ -57,6 +58,7 @@ scheduler_events = {
     ],
     "hourly": [
         "logistics_wizard.tracking_service.scheduled_scan_stale_shipments",
+        "logistics_wizard.exception_engine.api.scheduled_evaluate_all_active_cases",
     ],
     "cron": {
         "0 */2 * * *": [
