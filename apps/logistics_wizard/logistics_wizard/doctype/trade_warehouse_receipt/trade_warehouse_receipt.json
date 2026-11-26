@@ -1,0 +1,264 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-26 21:29:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_ident",
+  "naming_series",
+  "trade_case",
+  "trade_type",
+  "shipment_tracking",
+  "col_break_erp",
+  "purchase_receipt",
+  "delivery_note",
+  "receiving_status",
+  "section_plan",
+  "warehouse",
+  "expected_arrival",
+  "actual_arrival",
+  "col_break_team",
+  "space_reserved",
+  "receiving_team",
+  "container_seal_intact",
+  "section_inspection",
+  "expected_qty",
+  "received_qty",
+  "missing_qty",
+  "damaged_qty",
+  "col_break_discrepancy",
+  "discrepancy_alert",
+  "discrepancy_details",
+  "inspected_by",
+  "inspected_at",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_ident",
+   "fieldtype": "Section Break",
+   "label": "Định danh Phiếu Tiếp nhận & Kiểm đếm Kho"
+  },
+  {
+   "default": "TWHR-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Mã Series",
+   "options": "TWHR-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trade_case",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hồ sơ XNK (Trade Case)",
+   "options": "Trade Case",
+   "reqd": 1
+  },
+  {
+   "default": "Import",
+   "fieldname": "trade_type",
+   "fieldtype": "Select",
+   "label": "Loại hình",
+   "options": "Import\nExport"
+  },
+  {
+   "fieldname": "shipment_tracking",
+   "fieldtype": "Link",
+   "label": "Vận đơn liên kết",
+   "options": "Shipment Tracking"
+  },
+  {
+   "fieldname": "col_break_erp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "purchase_receipt",
+   "fieldtype": "Link",
+   "label": "Phiếu nhập kho ERPNext (Purchase Receipt)",
+   "options": "Purchase Receipt"
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "label": "Phiếu xuất kho ERPNext (Delivery Note)",
+   "options": "Delivery Note"
+  },
+  {
+   "default": "NOT READY",
+   "fieldname": "receiving_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trạng thái tiếp nhận kho",
+   "options": "NOT READY\nSCHEDULED\nIN PROGRESS\nINSPECTING\nDISCREPANCY\nCOMPLETED",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_plan",
+   "fieldtype": "Section Break",
+   "label": "Kế hoạch Mặt bằng & Đội tiếp nhận"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Kho tiếp nhận (Warehouse)"
+  },
+  {
+   "fieldname": "expected_arrival",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Ngày dự kiến về kho (Expected Arrival)"
+  },
+  {
+   "fieldname": "actual_arrival",
+   "fieldtype": "Date",
+   "label": "Ngày hàng thực tế về kho"
+  },
+  {
+   "fieldname": "col_break_team",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "space_reserved",
+   "fieldtype": "Check",
+   "label": "Đã bố trí mặt bằng kho (Space Reserved)"
+  },
+  {
+   "fieldname": "receiving_team",
+   "fieldtype": "Data",
+   "label": "Đội tiếp nhận kho (Receiving Team)"
+  },
+  {
+   "default": "1",
+   "fieldname": "container_seal_intact",
+   "fieldtype": "Check",
+   "label": "Niêm chì Container còn nguyên vẹn"
+  },
+  {
+   "fieldname": "section_inspection",
+   "fieldtype": "Section Break",
+   "label": "Kết quả Kiểm đếm & Giám định (KCS / Discrepancy)"
+  },
+  {
+   "default": "0",
+   "fieldname": "expected_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Số lượng chứng từ (Expected Qty)"
+  },
+  {
+   "default": "0",
+   "fieldname": "received_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Số lượng thực nhận (Received Qty)"
+  },
+  {
+   "default": "0",
+   "fieldname": "missing_qty",
+   "fieldtype": "Float",
+   "label": "Số lượng thiếu (Missing Qty)",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "damaged_qty",
+   "fieldtype": "Float",
+   "label": "Số lượng hư hỏng (Damaged Qty)"
+  },
+  {
+   "fieldname": "col_break_discrepancy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "discrepancy_alert",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Cảnh báo Chênh lệch / Hư hỏng",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discrepancy_details",
+   "fieldtype": "Small Text",
+   "label": "Chi tiết biên bản chênh lệch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "inspected_by",
+   "fieldtype": "Link",
+   "label": "Người kiểm đếm (Inspector)",
+   "options": "User"
+  },
+  {
+   "fieldname": "inspected_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm kiểm đếm"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú kho"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-26 21:29:00.000000",
+ "modified_by": "Administrator",
+ "module": "Logistics Wizard",
+ "name": "Trade Warehouse Receipt",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Purchase User"
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

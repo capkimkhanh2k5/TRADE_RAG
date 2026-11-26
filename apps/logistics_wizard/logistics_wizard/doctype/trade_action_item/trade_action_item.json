@@ -1,0 +1,175 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-26 21:29:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_action",
+  "naming_series",
+  "trade_case",
+  "shipment_exception",
+  "action_title",
+  "col_break_owner",
+  "department",
+  "owner_user",
+  "owner_name",
+  "priority",
+  "due_date",
+  "status",
+  "section_completion",
+  "completed_by",
+  "completed_at",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_action",
+   "fieldtype": "Section Break",
+   "label": "Thông tin Đầu việc (Trade Action Item)"
+  },
+  {
+   "default": "TACT-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Mã Series",
+   "options": "TACT-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trade_case",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hồ sơ XNK (Trade Case)",
+   "options": "Trade Case",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shipment_exception",
+   "fieldtype": "Link",
+   "label": "Sự cố liên quan (Exception)",
+   "options": "Shipment Exception"
+  },
+  {
+   "fieldname": "action_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nội dung hành động (Action)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_owner",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Logistics",
+   "fieldname": "department",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Phòng ban phụ trách",
+   "options": "Logistics\nPurchasing\nCustoms\nAccounting\nWarehouse\nSales\nManagement"
+  },
+  {
+   "fieldname": "owner_user",
+   "fieldtype": "Link",
+   "label": "Người phụ trách (User)",
+   "options": "User"
+  },
+  {
+   "fieldname": "owner_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tên người phụ trách"
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Mức độ ưu tiên",
+   "options": "Low\nMedium\nHigh\nUrgent"
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Hạn hoàn thành (Due Date)"
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trạng thái",
+   "options": "Open\nIn Progress\nCompleted\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_completion",
+   "fieldtype": "Section Break",
+   "label": "Hoàn tất & Ghi chú"
+  },
+  {
+   "fieldname": "completed_by",
+   "fieldtype": "Link",
+   "label": "Người xác nhận hoàn tất",
+   "options": "User"
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm hoàn tất"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú thực hiện"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-26 21:29:00.000000",
+ "modified_by": "Administrator",
+ "module": "Logistics Wizard",
+ "name": "Trade Action Item",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Purchase User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Sales User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Stock User",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
