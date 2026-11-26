@@ -200,9 +200,83 @@
    "link_type": "Page",
    "onboard": 1,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reporting & Audit (Module 7)",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Shipment Delay & Carrier Performance",
+   "link_count": 0,
+   "link_to": "Shipment Delay and Carrier Performance",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Trade Document Readiness Audit",
+   "link_count": 0,
+   "link_to": "Trade Document Readiness Audit",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Customs Clearance SLA Performance",
+   "link_count": 0,
+   "link_to": "Customs Clearance SLA Performance",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Import Landed Cost Variance",
+   "link_count": 0,
+   "link_to": "Import Landed Cost Variance",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Export Profitability & Logistics Cost",
+   "link_count": 0,
+   "link_to": "Export Profitability and Logistics Cost",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Trade Exception & Action Audit",
+   "link_count": 0,
+   "link_to": "Trade Exception and Action Audit",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
   }
  ],
- "modified": "2026-11-26 21:34:00.000000",
+ "modified": "2026-11-26 22:05:00.000000",
  "modified_by": "Administrator",
  "module": "Logistics Wizard",
  "name": "Logistics Wizard",
