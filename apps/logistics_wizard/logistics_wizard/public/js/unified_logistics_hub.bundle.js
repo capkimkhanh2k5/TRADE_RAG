@@ -695,11 +695,80 @@ class TradeCaseOverviewController {
             }
 
             frappe.prompt([
-                { fieldname: 'target_status', fieldtype: 'Select', label: 'Chuyển trạng thái quy trình', options: 'Ready\nDeclared\nProcessing\nCleared\nRejected\nPreparing', default: 'Ready', reqd: 1 },
-                { fieldname: 'declaration_no', fieldtype: 'Data', label: 'Số tờ khai VNACCS/VCIS', default: (self.currentData.customs_readiness && self.currentData.customs_readiness.declaration_no) || '' },
-                { fieldname: 'customs_lane', fieldtype: 'Select', label: 'Phân luồng Hải quan', options: 'Not Declared\nGreen\nYellow\nRed', default: (self.currentData.customs_readiness && self.currentData.customs_readiness.channel) || 'Green' },
-                { fieldname: 'rejection_reason', fieldtype: 'Small Text', label: 'Lý do từ chối / Ghi chú (nếu Rejected)' }
+                {
+                    fieldname: 'action_mode',
+                    fieldtype: 'Select',
+                    label: 'Nghiệp vụ Hải quan cần thực hiện',
+                    options: 'Cập nhật trạng thái tờ khai\nGợi ý mã HS bằng AI/RAG\nPhê duyệt / Từ chối HS (Chuyên viên)',
+                    default: 'Cập nhật trạng thái tờ khai',
+                    reqd: 1
+                },
+                { fieldname: 'target_status', fieldtype: 'Select', label: 'Chuyển trạng thái quy trình', options: 'Ready\nDeclared\nProcessing\nCleared\nRejected\nPreparing', default: 'Ready', depends_on: 'eval:doc.action_mode=="Cập nhật trạng thái tờ khai"' },
+                { fieldname: 'declaration_no', fieldtype: 'Data', label: 'Số tờ khai VNACCS/VCIS', default: (self.currentData.customs_readiness && self.currentData.customs_readiness.declaration_no) || '', depends_on: 'eval:doc.action_mode=="Cập nhật trạng thái tờ khai"' },
+                { fieldname: 'customs_lane', fieldtype: 'Select', label: 'Phân luồng Hải quan', options: 'Not Declared\nGreen\nYellow\nRed', default: (self.currentData.customs_readiness && self.currentData.customs_readiness.channel) || 'Green', depends_on: 'eval:doc.action_mode=="Cập nhật trạng thái tờ khai"' },
+                { fieldname: 'rejection_reason', fieldtype: 'Small Text', label: 'Lý do từ chối / Ghi chú (nếu Rejected)', depends_on: 'eval:doc.action_mode=="Cập nhật trạng thái tờ khai"' },
+                { fieldname: 'item_idx', fieldtype: 'Int', label: 'Số thứ tự dòng hàng (1-based)', default: 1, depends_on: 'eval:doc.action_mode!="Cập nhật trạng thái tờ khai"' },
+                { fieldname: 'item_description', fieldtype: 'Small Text', label: 'Mô tả kỹ thuật hàng hóa (AI/RAG)', depends_on: 'eval:doc.action_mode=="Gợi ý mã HS bằng AI/RAG"' },
+                { fieldname: 'use_llm', fieldtype: 'Check', label: 'Kết hợp LLM giải trình GIR', default: 0, depends_on: 'eval:doc.action_mode=="Gợi ý mã HS bằng AI/RAG"' },
+                { fieldname: 'approval_action', fieldtype: 'Select', label: 'Quyết định Chuyên viên', options: 'approve\nreject', default: 'approve', depends_on: 'eval:doc.action_mode=="Phê duyệt / Từ chối HS (Chuyên viên)"' },
+                { fieldname: 'approved_hs_code', fieldtype: 'Data', label: 'Mã HS phê duyệt (để trống = xác nhận mã đề xuất)', depends_on: 'eval:doc.action_mode=="Phê duyệt / Từ chối HS (Chuyên viên)"' },
+                { fieldname: 'approval_notes', fieldtype: 'Small Text', label: 'Ghi chú thẩm định chuyên viên', default: 'Đã đối chiếu biểu thuế TT31/2022/TT-BTC.', depends_on: 'eval:doc.action_mode=="Phê duyệt / Từ chối HS (Chuyên viên)"' }
             ], function (vals) {
+                if (vals.action_mode === 'Gợi ý mã HS bằng AI/RAG') {
+                    frappe.call({
+                        method: 'logistics_wizard.customs_engine.api.suggest_hs_code_with_rag',
+                        args: {
+                            declaration_name: declName,
+                            item_idx: vals.item_idx || 1,
+                            item_description: vals.item_description || undefined,
+                            auto_propose: 1,
+                            use_llm: vals.use_llm ? 1 : 0
+                        },
+                        freeze: true,
+                        freeze_message: __('Đang tra cứu AI/RAG & biểu thuế HS...'),
+                        callback: function (r) {
+                            const res = r.message || {};
+                            if (res.success && res.primary_recommendation) {
+                                const top = res.primary_recommendation;
+                                frappe.msgprint({
+                                    title: __(`AI/RAG Đề xuất HS: ${top.hs_code} (${top.confidence_score}%)`),
+                                    indicator: 'blue',
+                                    message: `<p><b>Mô tả:</b> ${frappe.utils.escape_html(top.description || '')}</p>` +
+                                        `<p><b>Căn cứ pháp lý:</b> ${frappe.utils.escape_html(top.legal_basis || '')}</p>` +
+                                        `<p style="color:#b45309;"><b>Lưu ý kiểm soát:</b> Trạng thái đã lưu là <b>Proposed</b>. Chuyên viên Hải quan cần bấm <b>Phê duyệt HS</b> trước khi truyền tờ khai.</p>`
+                                });
+                                self.load_case(caseId);
+                            } else {
+                                frappe.msgprint({ title: __('Kết quả AI/RAG'), message: res.error || res.message || 'Không tìm thấy mã HS phù hợp.', indicator: 'orange' });
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                if (vals.action_mode === 'Phê duyệt / Từ chối HS (Chuyên viên)') {
+                    frappe.call({
+                        method: 'logistics_wizard.customs_engine.api.approve_hs_code',
+                        args: {
+                            declaration_name: declName,
+                            item_idx: vals.item_idx || 1,
+                            action: vals.approval_action || 'approve',
+                            approved_hs_code: vals.approved_hs_code || undefined,
+                            notes: vals.approval_notes || undefined
+                        },
+                        callback: function (r) {
+                            const res = r.message || {};
+                            if (res.success) {
+                                frappe.show_alert({ message: __(`Đã cập nhật thẩm định HS dòng #${res.item_idx}: ${res.hs_approval_status} (${res.approved_hs_code || 'N/A'})`), indicator: 'green' });
+                                self.load_case(caseId);
+                            } else {
+                                frappe.msgprint({ title: __('Lỗi phê duyệt HS'), message: res.error || 'Không thể phê duyệt HS.', indicator: 'red' });
+                            }
+                        }
+                    });
+                    return;
+                }
+
                 frappe.call({
                     method: 'logistics_wizard.customs_engine.api.advance_customs_workflow',
                     args: {
@@ -719,7 +788,7 @@ class TradeCaseOverviewController {
                         }
                     }
                 });
-            }, __(`Cập nhật Tờ khai ${declName}`), __('Cập nhật'));
+            }, __(`Thao tác Hải quan & AI/RAG — ${declName}`), __('Thực hiện'));
         });
 
         $(document).on('click', '#btn-add-cost', function () {
