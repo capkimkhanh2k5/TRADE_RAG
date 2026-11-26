@@ -2136,8 +2136,8 @@ def _build_live_trade_case_overview(tc_doc, available_cases):
     shipments = []
     if frappe.db.exists("DocType", "Shipment Tracking"):
         st_fields = [
-            "name", "carrier", "vessel_name", "container_number", "origin_port",
-            "destination_port", "etd", "atd", "eta", "original_eta", "ata",
+            "name", "carrier", "vessel_name", "container_id", "origin_port",
+            "destination_port", "etd", "atd", "eta", "initial_eta", "ata",
             "delay_days", "status", "is_stale",
         ]
         if getattr(tc_doc, "shipment_tracking", None) and frappe.db.exists("Shipment Tracking", tc_doc.shipment_tracking):
@@ -2171,7 +2171,7 @@ def _build_live_trade_case_overview(tc_doc, available_cases):
         "pol": primary_shp.get("origin_port") or getattr(tc_doc, "origin_port", None) or "N/A",
         "pod": primary_shp.get("destination_port") or getattr(tc_doc, "destination_port", None) or "N/A",
         "atd": str(primary_shp.get("atd") or primary_shp.get("etd")) if (primary_shp.get("atd") or primary_shp.get("etd")) else None,
-        "original_eta": str(primary_shp.get("original_eta") or primary_shp.get("eta")) if (primary_shp.get("original_eta") or primary_shp.get("eta")) else None,
+        "original_eta": str(primary_shp.get("initial_eta") or primary_shp.get("eta")) if (primary_shp.get("initial_eta") or primary_shp.get("eta")) else None,
         "current_eta": str(primary_shp.get("eta")) if primary_shp.get("eta") else None,
         "delay_days": delay_days,
         "status": shp_status,
