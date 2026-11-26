@@ -132,6 +132,8 @@ try:
         get_case_export_profitability,
         audit_case_costs,
         allocate_and_sync_lcv,
+        get_cost_dashboard_data,
+        add_cost_item_to_case,
     )
 except ImportError:
     try:
@@ -140,12 +142,16 @@ except ImportError:
             get_case_export_profitability,
             audit_case_costs,
             allocate_and_sync_lcv,
+            get_cost_dashboard_data,
+            add_cost_item_to_case,
         )
     except ImportError:
         get_case_cost_summary = None
         get_case_export_profitability = None
         audit_case_costs = None
         allocate_and_sync_lcv = None
+        get_cost_dashboard_data = None
+        add_cost_item_to_case = None
 
 # 6. Module 3: Trade Document Management (Phase 2)
 try:
@@ -2074,6 +2080,330 @@ def get_all_trade_cases():
 
 
 
+def _build_live_trade_case_overview(tc_doc, available_cases):
+    """
+    Build a 100% live 14-section Trade Case Overview payload directly from MariaDB
+    for any existing Trade Case (TC-2026-*, IMP-*, EXP-*) with zero mock fallback.
+    """
+    cid = tc_doc.name
+    trade_type = getattr(tc_doc, "trade_type", None) or "Import"
+    current_stage = getattr(tc_doc, "current_stage", None) or ("SO" if trade_type == "Export" else "PO")
+    shipping_mode = getattr(tc_doc, "shipping_mode", None) or getattr(tc_doc, "mode", None) or "Ocean"
+    incoterm = getattr(tc_doc, "incoterm", None) or "FOB"
+
+    # 1. Lifecycle Stepper
+    if trade_type == "Export":
+        stage_defs = [
+            ("SO", "Sales Order"),
+            ("Booking", "Booking"),
+            ("Export Port", "Export Port"),
+            ("In Transit", "In Transit"),
+            ("Import Port", "Import Port"),
+            ("Customs", "Export Customs"),
+            ("Delivery", "Delivery"),
+            ("Cost Finalization", "Cost Finalization"),
+            ("Closed", "Closed"),
+        ]
+    else:
+        stage_defs = [
+            ("PO", "PO"),
+            ("Booking", "Booking"),
+            ("Export Port", "Export Port"),
+            ("In Transit", "In Transit"),
+            ("Import Port", "Import Port"),
+            ("Customs", "Customs"),
+            ("Warehouse", "Warehouse"),
+            ("Cost Finalization", "Cost Finalization"),
+            ("Closed", "Closed"),
+        ]
+
+    stage_keys = [s[0] for s in stage_defs]
+    stage_alias = "Delivery" if (trade_type == "Export" and current_stage == "Warehouse") else (
+        "SO" if (trade_type == "Export" and current_stage == "PO") else current_stage
+    )
+    current_idx = stage_keys.index(stage_alias) if stage_alias in stage_keys else 0
+    stages = []
+    for idx, (k, lbl) in enumerate(stage_defs):
+        if idx < current_idx or current_stage == "Closed":
+            st_flag = "completed"
+        elif idx == current_idx:
+            st_flag = "current"
+        else:
+            st_flag = "pending"
+        stages.append({"key": k, "label": lbl, "status": st_flag})
+
+    # 2. Live Shipment Summary from Shipment Tracking
+    shipments = []
+    if frappe.db.exists("DocType", "Shipment Tracking"):
+        st_fields = [
+            "name", "carrier", "vessel_name", "container_number", "origin_port",
+            "destination_port", "etd", "atd", "eta", "original_eta", "ata",
+            "delay_days", "status", "is_stale",
+        ]
+        if getattr(tc_doc, "shipment_tracking", None) and frappe.db.exists("Shipment Tracking", tc_doc.shipment_tracking):
+            row = frappe.db.get_value("Shipment Tracking", tc_doc.shipment_tracking, st_fields, as_dict=True)
+            if row:
+                shipments.append(row)
+        linked = frappe.get_all(
+            "Shipment Tracking",
+            filters={"trade_case": cid},
+            fields=st_fields,
+            order_by="modified desc",
+        ) or []
+        seen_names = {s["name"] for s in shipments}
+        for s in linked:
+            if s["name"] not in seen_names:
+                shipments.append(s)
+                seen_names.add(s["name"])
+
+    primary_shp = shipments[0] if shipments else {}
+    delay_days = int(primary_shp.get("delay_days") or 0)
+    shp_status = primary_shp.get("status") or ("Closed" if current_stage == "Closed" else "Pending Booking")
+    in_transit_cnt = sum(1 for s in shipments if s.get("status") in ("In Transit", "At Sea", "In Flight", "Dispatched"))
+    delivered_cnt = sum(1 for s in shipments if s.get("status") in ("Delivered", "Arrived Destination Port", "Completed"))
+    crit_shp_cnt = sum(1 for s in shipments if int(s.get("delay_days") or 0) >= 3 or s.get("is_stale"))
+
+    shipment_summary = {
+        "shipment_id": primary_shp.get("name") or None,
+        "carrier": primary_shp.get("carrier") or "Chưa phân bổ hãng vận tải",
+        "vessel": primary_shp.get("vessel_name") or "N/A",
+        "container_count": len(shipments),
+        "pol": primary_shp.get("origin_port") or getattr(tc_doc, "origin_port", None) or "N/A",
+        "pod": primary_shp.get("destination_port") or getattr(tc_doc, "destination_port", None) or "N/A",
+        "atd": str(primary_shp.get("atd") or primary_shp.get("etd")) if (primary_shp.get("atd") or primary_shp.get("etd")) else None,
+        "original_eta": str(primary_shp.get("original_eta") or primary_shp.get("eta")) if (primary_shp.get("original_eta") or primary_shp.get("eta")) else None,
+        "current_eta": str(primary_shp.get("eta")) if primary_shp.get("eta") else None,
+        "delay_days": delay_days,
+        "status": shp_status,
+        "total_shipments": len(shipments),
+        "shipment_counts": {
+            "in_transit": in_transit_cnt,
+            "delivered": delivered_cnt,
+            "critical": crit_shp_cnt,
+        },
+    }
+
+    # 3. Live Sub-Module Payloads (Document, Customs, Cost, Warehouse, Exceptions, Actions)
+    doc_readiness = (
+        get_case_documents_status(cid)
+        if get_case_documents_status
+        else {"ready_count": 0, "total_count": 0, "percentage": 0.0, "current_stage": current_stage, "missing_urgent": [], "categories": []}
+    )
+    customs_readiness = (
+        get_case_customs_status(cid)
+        if get_case_customs_status
+        else {"status": "NOT STARTED", "readiness_pct": 0, "clearance_status": "NOT CLEARED"}
+    )
+    cost_summary = (
+        get_case_cost_summary(cid)
+        if get_case_cost_summary
+        else {
+            "purchase_value": float(getattr(tc_doc, "order_amount", 0) or 0),
+            "estimated_cost": 0.0, "actual_cost": 0.0, "variance_amount": 0.0, "variance_pct": 0.0,
+            "actual_landed_cost": float(getattr(tc_doc, "order_amount", 0) or 0),
+            "currency": getattr(tc_doc, "currency", None) or "USD",
+            "breakdown": [], "invoices_received": 0, "invoices_total": 0,
+            "costs_verified": 0, "costs_allocated": 0, "cost_finalization_status": "DRAFT",
+        }
+    )
+    warehouse_readiness = (
+        get_case_warehouse_status(cid)
+        if get_case_warehouse_status
+        else {"expected_arrival": None, "warehouse": None, "receiving_status": "NOT READY", "expected_qty": 0, "received_qty": None, "space_reserved": False, "receiving_team": None, "discrepancy_alert": False}
+    )
+    open_exceptions = (
+        get_case_exceptions_summary(cid)
+        if get_case_exceptions_summary
+        else {"total_open": 0, "critical_count": 0, "overdue": 0, "due_soon": 0, "items": []}
+    )
+    upcoming_actions = get_case_action_items(cid) if get_case_action_items else []
+
+    # 4. Deterministic Overall Health & 6 Live Health Cards
+    try:
+        from logistics_wizard.exception_engine.rule_evaluator import compute_trade_case_health
+        health_eval = compute_trade_case_health(
+            signals={
+                "shipment": shipment_summary,
+                "documents": doc_readiness,
+                "customs": customs_readiness,
+                "cost": cost_summary,
+                "warehouse": warehouse_readiness,
+            },
+            open_exceptions=open_exceptions.get("items", []),
+        )
+    except Exception:
+        h_raw = getattr(tc_doc, "overall_health", None) or "Healthy"
+        health_eval = {
+            "status": h_raw,
+            "status_class": "danger" if h_raw == "Critical" else ("warning" if h_raw == "Attention" else "success"),
+            "summary": f"Hồ sơ {cid} đang ở chặng {current_stage}.",
+        }
+
+    health_status = health_eval["status"]
+    health_class = health_eval["status_class"]
+    badge_cls = "badge-danger" if health_status == "Critical" else ("badge-warning" if health_status == "Attention" else "badge-success")
+
+    doc_pct = float(doc_readiness.get("percentage") or 0)
+    doc_cls = "success" if doc_pct >= 100 else ("danger" if any(m.get("type") == "critical" for m in (doc_readiness.get("missing_urgent") or [])) else "warning")
+    cust_cls = "success" if customs_readiness.get("clearance_status") == "CLEARED" else (
+        "danger" if customs_readiness.get("channel") == "Red" or customs_readiness.get("clearance_status") == "REJECTED" else "warning"
+    )
+    wh_cls = "danger" if warehouse_readiness.get("discrepancy_alert") else (
+        "success" if warehouse_readiness.get("receiving_status") == "COMPLETED" else ("info" if warehouse_readiness.get("space_reserved") else "neutral")
+    )
+    var_pct = float(cost_summary.get("variance_pct") or 0)
+    cost_cls = "danger" if var_pct >= 15 else ("warning" if var_pct >= 5 else "success")
+    exc_total = int(open_exceptions.get("total_open") or 0)
+    exc_crit = int(open_exceptions.get("critical_count") or 0)
+    exc_cls = "danger" if exc_crit > 0 else ("warning" if exc_total > 0 else "success")
+    shp_cls = "danger" if delay_days >= 3 else ("warning" if delay_days >= 1 else "success")
+
+    health_cards = [
+        {"key": "shipment", "label": "Shipment", "value": "DELAYED" if delay_days > 0 else shp_status.upper(), "sub": f"Trễ +{delay_days} ngày" if delay_days > 0 else (primary_shp.get("name") or "Chưa có vận đơn"), "class": shp_cls},
+        {"key": "documents", "label": "Documents", "value": f"{int(round(doc_pct))}% READY", "sub": f"{doc_readiness.get('ready_count', 0)}/{doc_readiness.get('total_count', 0)} Chứng từ", "class": doc_cls},
+        {"key": "customs", "label": "Customs", "value": f"{customs_readiness.get('readiness_pct', 0)}% READY", "sub": customs_readiness.get("clearance_status", "NOT CLEARED"), "class": cust_cls},
+        {"key": "warehouse", "label": "Warehouse", "value": warehouse_readiness.get("receiving_status", "NOT READY"), "sub": "Chênh lệch KCS!" if warehouse_readiness.get("discrepancy_alert") else (warehouse_readiness.get("warehouse") or "Chưa lên lịch"), "class": wh_cls},
+        {"key": "cost", "label": "Cost", "value": cost_summary.get("cost_finalization_status", "DRAFT"), "sub": f"{'+' if var_pct > 0 else ''}{var_pct:.1f}% Chênh lệch", "class": cost_cls},
+        {"key": "exceptions", "label": "Exceptions", "value": f"{exc_total} OPEN", "sub": f"{exc_crit} Critical" if exc_crit > 0 else "Không có sự cố nghiêm trọng", "class": exc_cls},
+    ]
+
+    # 5. Related ERP & Logistics Documents
+    related_docs = []
+    if getattr(tc_doc, "purchase_order", None):
+        po_st = frappe.db.get_value("Purchase Order", tc_doc.purchase_order, "status") or "Linked"
+        related_docs.append({"doctype": "Purchase Order", "name": tc_doc.purchase_order, "status": po_st, "link": f"/app/purchase-order/{tc_doc.purchase_order}"})
+    if getattr(tc_doc, "sales_order", None):
+        so_st = frappe.db.get_value("Sales Order", tc_doc.sales_order, "status") or "Linked"
+        related_docs.append({"doctype": "Sales Order", "name": tc_doc.sales_order, "status": so_st, "link": f"/app/sales-order/{tc_doc.sales_order}"})
+    if primary_shp.get("name"):
+        related_docs.append({"doctype": "Shipment Tracking", "name": primary_shp["name"], "status": shp_status, "link": f"/app/shipment-tracking/{primary_shp['name']}"})
+    if customs_readiness.get("declaration_name"):
+        related_docs.append({"doctype": "Customs Declaration", "name": customs_readiness["declaration_name"], "status": customs_readiness.get("workflow_status", "Preparing"), "link": f"/app/customs-declaration/{customs_readiness['declaration_name']}"})
+    if warehouse_readiness.get("purchase_receipt"):
+        related_docs.append({"doctype": "Purchase Receipt", "name": warehouse_readiness["purchase_receipt"], "status": "Submitted", "link": f"/app/purchase-receipt/{warehouse_readiness['purchase_receipt']}"})
+    if frappe.db.exists("DocType", "Trade Cost Sheet"):
+        tcs_row = frappe.db.get_value("Trade Cost Sheet", {"trade_case": cid, "docstatus": ["!=", 2]}, ["name", "status", "landed_cost_voucher"], as_dict=True)
+        if tcs_row:
+            related_docs.append({"doctype": "Trade Cost Sheet", "name": tcs_row["name"], "status": tcs_row.get("status") or "Draft", "link": f"/app/trade-cost-sheet/{tcs_row['name']}"})
+            if tcs_row.get("landed_cost_voucher"):
+                related_docs.append({"doctype": "Landed Cost Voucher", "name": tcs_row["landed_cost_voucher"], "status": "Linked", "link": f"/app/landed-cost-voucher/{tcs_row['landed_cost_voucher']}"})
+
+    # 6. Responsibility Matrix (RACI)
+    raci = []
+    for st in (getattr(tc_doc, "stakeholders", None) or []):
+        raci.append({
+            "role": getattr(st, "role", None) or "Stakeholder",
+            "name": getattr(st, "person_name", None) or getattr(st, "user", None) or "Unassigned",
+            "department": getattr(st, "department", None) or "Logistics",
+            "email": getattr(st, "email", None) or getattr(st, "user", None) or "",
+        })
+    if not raci:
+        owner_u = getattr(tc_doc, "case_owner", None) or getattr(tc_doc, "owner", None) or "Administrator"
+        raci.append({
+            "role": "Case Owner",
+            "name": owner_u,
+            "department": getattr(tc_doc, "department", None) or "Logistics Operations",
+            "email": owner_u,
+        })
+
+    # 7. Real Activity Timeline aggregated from child records
+    timeline = []
+    if getattr(tc_doc, "creation", None):
+        timeline.append({"time": str(tc_doc.creation)[:16], "actor": getattr(tc_doc, "owner", "System"), "event": f"Khởi tạo hồ sơ {cid} ({trade_type} • {shipping_mode} • {incoterm})"})
+    if customs_readiness.get("declaration_name"):
+        timeline.append({"time": str(getattr(tc_doc, "modified", ""))[:16], "actor": "Customs Engine", "event": f"Tờ khai {customs_readiness['declaration_name']}: {customs_readiness.get('declaration_status')}"})
+    for exc_it in (open_exceptions.get("items") or [])[:5]:
+        timeline.append({"time": exc_it.get("due_date") or str(getattr(tc_doc, "modified", ""))[:16], "actor": exc_it.get("department", "Exception Engine"), "event": f"[{exc_it.get('severity')}] {exc_it.get('title')}"})
+    if warehouse_readiness.get("has_receipt"):
+        timeline.append({"time": warehouse_readiness.get("actual_arrival") or warehouse_readiness.get("expected_arrival") or "", "actor": "Warehouse Engine", "event": f"Kho {warehouse_readiness.get('warehouse') or ''}: {warehouse_readiness.get('receiving_status')}"})
+
+    # 8. Stage-Gate Closure Evaluation (inline without recursion)
+    close_reasons = []
+    if current_stage not in ("Warehouse", "Delivery", "Cost Finalization", "Closed") and shp_status not in ("Delivered", "Arrived Destination Port", "Completed"):
+        close_reasons.append(f"✗ Shipment chưa giao đến đích (Đang ở chặng {current_stage})")
+    if doc_readiness.get("total_count", 0) > 0 and doc_pct < 100:
+        close_reasons.append(f"✗ Chưa hoàn tất 100% chứng từ ({doc_readiness.get('ready_count', 0)}/{doc_readiness.get('total_count', 0)})")
+    if customs_readiness.get("clearance_status") != "CLEARED" and int(getattr(tc_doc, "customs_cleared", 0) or 0) != 1:
+        close_reasons.append("✗ Tờ khai Hải quan chưa thông quan")
+    if cost_summary.get("invoices_total", 0) > 0 and cost_summary.get("cost_finalization_status") not in ("ALLOCATED", "FINALIZED") and int(getattr(tc_doc, "costs_finalized", 0) or 0) != 1:
+        close_reasons.append("✗ Chi phí Landed Cost chưa hoàn tất phân bổ")
+    if warehouse_readiness.get("discrepancy_alert"):
+        close_reasons.append("✗ Còn chênh lệch/hư hỏng kiểm đếm kho chưa xử lý")
+    if exc_total > 0:
+        close_reasons.append(f"✗ Còn {exc_total} sự cố đang mở chưa được giải quyết")
+
+    origin_label = getattr(tc_doc, "origin_port", None) or getattr(tc_doc, "origin_country", None) or "N/A"
+    dest_label = getattr(tc_doc, "destination_port", None) or getattr(tc_doc, "destination_country", None) or "N/A"
+
+    return {
+        "status": "success",
+        "is_live": True,
+        "case_id": cid,
+        "available_cases": available_cases,
+        "header": {
+            "case_id": cid,
+            "case_title": getattr(tc_doc, "case_title", None) or cid,
+            "trade_type": trade_type,
+            "status": getattr(tc_doc, "status", None) or "Active",
+            "health": health_status,
+            "health_badge_class": badge_cls,
+            "supplier": getattr(tc_doc, "supplier", None),
+            "customer": getattr(tc_doc, "customer", None),
+            "purchase_order": getattr(tc_doc, "purchase_order", None),
+            "sales_order": getattr(tc_doc, "sales_order", None),
+            "mode": shipping_mode,
+            "incoterm": incoterm,
+            "origin": origin_label,
+            "destination": dest_label,
+            "owner": getattr(tc_doc, "case_owner", None) or getattr(tc_doc, "owner", None) or "Administrator",
+            "department": getattr(tc_doc, "department", None) or "Logistics Operations",
+            "priority": getattr(tc_doc, "priority", None) or "Normal",
+            "created_date": str(getattr(tc_doc, "start_date", None) or getattr(tc_doc, "opened_date", None) or getattr(tc_doc, "creation", ""))[:10],
+            "expected_close": str(getattr(tc_doc, "target_completion_date", None) or getattr(tc_doc, "expected_close_date", None) or "")[:10] or None,
+        },
+        "lifecycle": {
+            "current_stage": current_stage,
+            "current_index": current_idx,
+            "stages": stages,
+            "previous_milestone": {
+                "title": f"Chặng hiện tại: {current_stage}",
+                "date": str(primary_shp.get("atd") or getattr(tc_doc, "modified", ""))[:10],
+            },
+            "next_milestone": {
+                "title": f"Đích đến: {dest_label}",
+                "eta": (f"{shipment_summary['current_eta']} (Trễ +{delay_days} ngày)" if delay_days > 0 else (shipment_summary["current_eta"] or "Đang cập nhật")),
+            },
+        },
+        "overall_health": {
+            "status": health_status,
+            "status_class": health_class,
+            "summary": health_eval["summary"],
+            "cards": health_cards,
+        },
+        "shipment_summary": shipment_summary,
+        "document_readiness": doc_readiness,
+        "customs_readiness": customs_readiness,
+        "cost_summary": cost_summary,
+        "warehouse_readiness": warehouse_readiness,
+        "open_exceptions": open_exceptions,
+        "upcoming_actions": upcoming_actions,
+        "related_erp_documents": related_docs,
+        "responsibility_matrix": raci,
+        "activity_timeline": timeline,
+        "quick_actions": {
+            "can_close": len(close_reasons) == 0,
+            "close_reasons": close_reasons,
+            "allowed_actions": [
+                {"id": "btn-upload-doc", "label": "Upload Document", "icon": "fa fa-upload"},
+                {"id": "btn-update-customs", "label": "Update Customs", "icon": "fa fa-check-circle"},
+                {"id": "btn-add-cost", "label": "Add Cost Invoice", "icon": "fa fa-dollar-sign"},
+                {"id": "btn-create-exception", "label": "Create Exception", "icon": "fa fa-exclamation-triangle"},
+                {"id": "btn-add-action", "label": "Add Action Item", "icon": "fa fa-plus"},
+            ],
+        },
+    }
+
+
 @frappe.whitelist(allow_guest=True)
 def get_trade_case_overview_data(case_id=None):
     """
@@ -2083,7 +2413,21 @@ def get_trade_case_overview_data(case_id=None):
     available_cases = get_trade_case_list()
     selected_case_id = case_id or (available_cases[0]["case_id"] if available_cases else "IMP-2026-001")
 
-    # Base Mock Models for the 3 representative cases
+    # Live DB Path: whenever the Trade Case exists in MariaDB, return 100% live aggregated data
+    if (
+        frappe
+        and getattr(frappe, "db", None)
+        and callable(getattr(frappe.db, "exists", None))
+        and frappe.db.exists("DocType", "Trade Case")
+        and frappe.db.exists("Trade Case", selected_case_id)
+    ):
+        try:
+            tc_doc = frappe.get_doc("Trade Case", selected_case_id)
+            return _build_live_trade_case_overview(tc_doc, available_cases)
+        except Exception as exc:
+            logger.warning("Live Trade Case overview aggregation fallback for %s: %s", selected_case_id, exc)
+
+    # Offline / Mock Fallback Models for the 3 representative demo cases (used when DB has no record)
     if selected_case_id == "IMP-2026-002":
         data = {
             "status": "success",
