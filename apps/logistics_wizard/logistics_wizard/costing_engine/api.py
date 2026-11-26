@@ -468,16 +468,25 @@ def _extract_case_allocation_items(case_id: str, cost_sheet: Any = None) -> List
 
 
 def _format_audit_cards(audit_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Convert raw CostAuditEngine output into structured UI audit cards."""
-    errors = audit_result.get("errors") or []
-    warnings = audit_result.get("warnings") or []
-    anomalies = audit_result.get("anomalies") or []
+    """Convert raw CostAuditEngine output into structured UI audit cards with clean text."""
+    def _clean_text(item: Any) -> str:
+        if isinstance(item, dict):
+            return str(item.get("details") or item.get("message") or item.get("type") or "").strip()
+        return str(item or "").strip()
 
-    dup_issues = [e for e in (errors + warnings + anomalies) if "duplicat" in str(e).lower() or "trùng" in str(e).lower()]
-    missing_issues = [e for e in (errors + warnings + anomalies) if "missing" in str(e).lower() or "thiếu" in str(e).lower() or "no active" in str(e).lower()]
-    assoc_issues = [e for e in (errors + warnings + anomalies) if "case" in str(e).lower() or "mismatch" in str(e).lower() or "wrong" in str(e).lower()]
+    errors = [_clean_text(e) for e in (audit_result.get("errors") or []) if _clean_text(e)]
+    warnings = [_clean_text(w) for w in (audit_result.get("warnings") or []) if _clean_text(w)]
+    anomalies = [_clean_text(a) for a in (audit_result.get("anomalies") or []) if _clean_text(a)]
 
-    def _card(title: str, issues: List[Any], ok_desc: str) -> Dict[str, Any]:
+    # Deduplicate while preserving order so dict anomalies don't repeat warning strings
+    all_issues = list(dict.fromkeys([*errors, *warnings, *anomalies]))
+    error_set = set(errors)
+
+    dup_issues = [e for e in all_issues if "duplicat" in e.lower() or "trùng" in e.lower()]
+    missing_issues = [e for e in all_issues if "missing" in e.lower() or "thiếu" in e.lower() or "no active" in e.lower()]
+    assoc_issues = [e for e in all_issues if "case" in e.lower() or "mismatch" in e.lower() or "wrong" in e.lower()]
+
+    def _card(title: str, issues: List[str], ok_desc: str) -> Dict[str, Any]:
         if not issues:
             return {
                 "title": title,
@@ -486,13 +495,13 @@ def _format_audit_cards(audit_result: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "border": "#10b981",
                 "desc": ok_desc,
             }
-        is_err = any(i in errors for i in issues)
+        is_err = any(i in error_set for i in issues)
         return {
             "title": title,
             "status": "Cần xử lý" if is_err else "Cần rà soát",
             "status_class": "delay-tag-positive",
             "border": "#dc2626" if is_err else "#d97706",
-            "desc": "; ".join(str(i) for i in issues[:3]),
+            "desc": "; ".join(issues[:3]),
         }
 
     return [
@@ -673,7 +682,21 @@ def get_cost_dashboard_data(
 
     selected_id = str(case_id or "").strip()
     if not selected_id and available_cases:
-        selected_id = available_cases[0]["case_id"]
+        if use_db:
+            available_ids = [c["case_id"] for c in available_cases]
+            active_sheet_case = frappe.db.get_value(
+                "Trade Cost Sheet",
+                {
+                    "trade_case": ["in", available_ids],
+                    "docstatus": ["!=", 2],
+                    "total_actual_cost": [">", 0],
+                },
+                "trade_case",
+                order_by="modified desc",
+            )
+            selected_id = active_sheet_case or available_cases[0]["case_id"]
+        else:
+            selected_id = available_cases[0]["case_id"]
 
     cost_sheet = None
     cost_sheet_name = None

@@ -13,7 +13,7 @@ class UnifiedLogisticsHub {
     constructor(wrapper) {
         this.wrapper = wrapper;
         this.currentTab = 'executive';
-        this.currentCaseId = 'IMP-2026-001';
+        this.currentCaseId = '';
         this.executiveDashboard = wrapper ? wrapper.executive_dashboard : null;
         this.trackingHub = wrapper ? wrapper.shipment_tracking_hub : null;
         this.overviewController = wrapper ? wrapper.trade_case_overview : null;
@@ -105,12 +105,12 @@ class UnifiedLogisticsHub {
                 if (options.case_id) {
                     this.overviewController.load_case(options.case_id);
                 } else if (!this.overviewController.currentData) {
-                    this.overviewController.load_case(this.currentCaseId || 'IMP-2026-001');
+                    this.overviewController.load_case(this.currentCaseId || '');
                 }
             }
         } else if (targetKey === 'cost') {
             if (this.tradeCostDashboard) {
-                const caseId = options.case_id || this.currentCaseId || 'IMP-2026-001';
+                const caseId = options.case_id || this.currentCaseId || '';
                 this.tradeCostDashboard.load_data(caseId);
             }
         } else if (targetKey === 'copilot') {
@@ -332,20 +332,109 @@ class ExecutiveDashboardController {
         if (!this.data) return;
         const d = this.data;
 
-        // 1. Render Macro KPIs
+        // 1. Render Macro KPIs (100% Live Metrics, Sub-Labels & Progress Bars)
         if (d.metrics) {
-            $('#exec-val-total-cases').text(d.metrics.total_cases || 28);
-            $('#exec-sub-import').text(d.metrics.import_cases || 20);
-            $('#exec-sub-export').text(d.metrics.export_cases || 8);
-            const impPct = Math.round(((d.metrics.import_cases || 20) / (d.metrics.total_cases || 28)) * 100);
-            $('#exec-bar-import').css('width', impPct + '%');
-            $('#exec-bar-export').css('width', (100 - impPct) + '%');
+            const m = d.metrics;
+            const totalCases = Number(m.total_cases ?? 0);
+            const impCases = Number(m.import_cases ?? 0);
+            const expCases = Number(m.export_cases ?? 0);
+            const impPct = totalCases > 0 ? Math.round((impCases / totalCases) * 100) : 0;
+            const expPct = totalCases > 0 ? (100 - impPct) : 0;
 
-            $('#exec-val-in-transit').text(d.metrics.in_transit_shipments || 18);
-            $('#exec-val-alerts').text(d.metrics.active_exceptions || 3);
-            
-            const spend = d.metrics.total_spend ? ('$' + Number(d.metrics.total_spend).toLocaleString()) : '$1,245,500';
-            $('#exec-val-spend').text(spend);
+            $('#exec-val-total-cases').text(totalCases);
+            $('#exec-bar-import').css('width', impPct + '%').attr('title', `Nhập khẩu: ${impCases}`);
+            $('#exec-bar-export').css('width', expPct + '%').attr('title', `Xuất khẩu: ${expCases}`);
+
+            const $kpiCards = $('#tab-pane-executive .exec-kpi-card');
+            if ($kpiCards.length >= 4) {
+                // Card 1: Total cases & Import/Export split
+                $kpiCards.eq(0).find('.exec-badge').text(`${Number(m.active_cases ?? totalCases)} đang xử lý`);
+                $kpiCards.eq(0).find('.exec-kpi-footer').html(
+                    `<span><i class="fa fa-arrow-circle-down text-blue"></i> Nhập khẩu: <strong id="exec-sub-import">${impCases}</strong> (${impPct}%)</span>` +
+                    `<span><i class="fa fa-arrow-circle-up text-emerald"></i> Xuất khẩu: <strong id="exec-sub-export">${expCases}</strong> (${expPct}%)</span>`
+                );
+
+                // Card 2: In-Transit Shipments & Modality split
+                const inTransit = Number(m.in_transit_shipments ?? 0);
+                const transitPct = totalCases > 0 ? Math.min(100, Math.round((inTransit / totalCases) * 100)) : 0;
+                const mod = d.modality_split || {};
+                const seaCnt = Number((mod.sea && mod.sea.count) ?? 0);
+                const airCnt = Number((mod.air && mod.air.count) ?? 0);
+                $('#exec-val-in-transit').text(inTransit);
+                $('#exec-bar-transit').css('width', transitPct + '%');
+                $kpiCards.eq(1).find('.exec-badge').text(`${transitPct}% Luồng hàng`);
+                $kpiCards.eq(1).find('.exec-kpi-footer').html(
+                    `<span><i class="fa fa-ship text-cyan"></i> ${seaCnt} Đường biển</span>` +
+                    `<span><i class="fa fa-plane text-blue"></i> ${airCnt} Hàng không</span>`
+                );
+
+                // Card 3: Alerts & Delay/Customs breakdown
+                const alertsCnt = Number(m.active_exceptions ?? 0);
+                const delayedCnt = Number(m.delayed_shipments ?? 0);
+                const customsStuck = Number(m.customs_stuck ?? 0);
+                const alertPct = totalCases > 0 ? Math.min(100, Math.round((alertsCnt / Math.max(totalCases, 1)) * 100)) : 0;
+                $('#exec-val-alerts').text(alertsCnt);
+                $kpiCards.eq(2).find('.exec-progress-bar').css('width', alertPct + '%');
+                $kpiCards.eq(2).find('.exec-badge').text(alertsCnt > 0 ? 'Cần chú ý' : 'Ổn định');
+                $kpiCards.eq(2).find('.exec-kpi-footer').html(
+                    `<span><i class="fa fa-exclamation-triangle text-amber"></i> ${delayedCnt} Trễ lịch ETA</span>` +
+                    `<span><i class="fa fa-clock-o text-amber"></i> ${customsStuck} Hạn hải quan</span>`
+                );
+
+                // Card 4: Total Spend, Estimated & Variance
+                const actualSpend = Number(m.total_spend ?? 0);
+                const estSpend = Number(m.total_estimated_spend ?? (d.cost_breakdown && d.cost_breakdown.total_estimated) ?? 0);
+                const diffSpend = actualSpend - estSpend;
+                const varPct = estSpend > 0 ? Math.round((diffSpend / estSpend) * 1000) / 10 : 0;
+                const isOver = diffSpend > 0;
+                const diffSign = diffSpend > 0 ? '+' : '-';
+                const pctSign = varPct > 0 ? '+' : '';
+                const spendBarPct = estSpend > 0 ? Math.min(100, Math.round((actualSpend / estSpend) * 100)) : 0;
+
+                $('#exec-val-spend').text('$' + actualSpend.toLocaleString('en-US'));
+                $kpiCards.eq(3).find('.exec-badge')
+                    .attr('class', 'exec-badge ' + (isOver ? 'exec-badge-amber' : 'exec-badge-success'))
+                    .text(isOver ? `${pctSign}${varPct}% Vượt dự toán` : `${pctSign}${varPct}% Tiết kiệm`);
+                $kpiCards.eq(3).find('.exec-progress-bar')
+                    .attr('class', 'exec-progress-bar ' + (isOver ? 'bg-amber' : 'bg-emerald'))
+                    .css('width', spendBarPct + '%');
+                $kpiCards.eq(3).find('.exec-kpi-footer').html(
+                    `<span>Dự toán: <strong>$${estSpend.toLocaleString('en-US')}</strong></span>` +
+                    `<span>Chênh lệch: <strong class="${isOver ? 'text-amber' : 'text-emerald'}">${diffSpend === 0 ? '$0' : (diffSign + '$' + Math.abs(diffSpend).toLocaleString('en-US'))}</strong></span>`
+                );
+            } else {
+                $('#exec-sub-import').text(impCases);
+                $('#exec-sub-export').text(expCases);
+                $('#exec-val-in-transit').text(m.in_transit_shipments ?? 0);
+                $('#exec-val-alerts').text(m.active_exceptions ?? 0);
+                $('#exec-val-spend').text('$' + Number(m.total_spend ?? 0).toLocaleString('en-US'));
+            }
+        }
+
+        // 1b. Render Live Modality Split Bars
+        if (d.modality_split) {
+            const ms = d.modality_split;
+            const modItems = [
+                { key: 'sea', icon: 'fa-ship text-cyan', label: 'Đường biển (FCL/LCL)', bar: 'bg-cyan' },
+                { key: 'air', icon: 'fa-plane text-blue', label: 'Hàng không (Air Cargo)', bar: 'bg-blue' },
+                { key: 'road', icon: 'fa-truck text-emerald', label: 'Vận tải bộ (Trucking)', bar: 'bg-emerald' }
+            ];
+            const modRowsHtml = modItems.map(mi => {
+                const entry = ms[mi.key] || { pct: 0, count: 0 };
+                return `
+                    <div class="modality-row">
+                        <span class="modality-title"><i class="fa ${mi.icon}"></i> ${mi.label}</span>
+                        <div class="modality-bar-wrap">
+                            <div class="modality-bar ${mi.bar}" style="width: ${Number(entry.pct || 0)}%;"></div>
+                        </div>
+                        <span class="modality-pct">${Number(entry.pct || 0)}% (${Number(entry.count || 0)} lô)</span>
+                    </div>
+                `;
+            }).join('');
+            const $modBlock = $('#tab-pane-executive .exec-modality-block');
+            if ($modBlock.length) {
+                $modBlock.html('<span class="exec-subhead">Tỷ Trọng Phương Thức Vận Chuyển:</span>' + modRowsHtml);
+            }
         }
 
         // 2. Render Pipeline Funnel
@@ -390,7 +479,18 @@ class ExecutiveDashboardController {
             });
         }
 
-        // 4. Render Cost Breakdown Bars
+        // 4. Render Cost Breakdown Bars & Header Variance Badge
+        if (d.cost_breakdown) {
+            const cb = d.cost_breakdown;
+            const $cbBadge = $('#exec-cost-breakdown-list').closest('.exec-card').find('.exec-card-header .exec-badge');
+            if ($cbBadge.length) {
+                const savAmt = Number(cb.savings_amount ?? ((cb.total_estimated || 0) - (cb.total_actual || 0)));
+                const isOver = savAmt < 0;
+                $cbBadge
+                    .attr('class', 'exec-badge ' + (isOver ? 'exec-badge-amber' : 'exec-badge-success'))
+                    .text(isOver ? `Vượt +$${Math.abs(savAmt).toLocaleString('en-US')}` : `Tiết kiệm +$${savAmt.toLocaleString('en-US')}`);
+            }
+        }
         if (d.cost_breakdown && d.cost_breakdown.categories) {
             const html = d.cost_breakdown.categories.map(c => {
                 const varSign = c.variance_pct > 0 ? '+' : '';
@@ -2705,7 +2805,7 @@ class ShipmentTrackingHub {
 class EmbeddedTradeCostDashboardController {
     constructor(wrapper) {
         this.wrapper = wrapper;
-        this.currentCaseId = 'IMP-2026-001';
+        this.currentCaseId = '';
         this.currentRule = 'weight';
         this.currentCaseType = 'all';
         this.caseData = this.get_mock_cases_data();
@@ -3041,7 +3141,7 @@ class EmbeddedTradeCostDashboardController {
                 <tr>
                     <td style="font-weight: 600; color: #0f172a;">${it.type}</td>
                     <td style="color: #475569;">${it.supplier}</td>
-                    <td><code>${it.inv_no}</code></td>
+                    <td><span style="font-family: monospace; font-size: 12px; color: #0369a1; background: #f0f9ff; padding: 2px 6px; border-radius: 4px; display: inline-block;">${it.inv_no}</span></td>
                     <td class="text-right" style="color: #64748b;">$${est.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td class="text-right" style="font-weight: 600; color: #0f172a;">$${act.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td class="text-right ${diffCls}">${diffSign}$${diff.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>

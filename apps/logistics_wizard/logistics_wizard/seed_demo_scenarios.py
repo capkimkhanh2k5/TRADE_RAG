@@ -241,7 +241,12 @@ def seed_all_demo_scenarios() -> Dict[str, Any]:
         advance_customs_workflow(c3["name"], "Processing", as_of_date=str(today))
     if not frappe.db.exists("Trade Cost Sheet", {"trade_case": s3_id}):
         add_cost_item_to_case(s3_id, "Freight", estimated_cost=12000, actual_cost=13800, invoice_number=f"ONE-INV-{s3_id}", cost_description="Export Ocean Freight + Red Channel Overtime", status="Verified")
-        frappe.db.set_value("Trade Cost Sheet", {"trade_case": s3_id}, {"export_revenue": 150000, "export_cogs": 102000}, update_modified=False)
+    sheet_s3 = frappe.db.get_value("Trade Cost Sheet", {"trade_case": s3_id}, "name")
+    if sheet_s3:
+        s3_doc = frappe.get_doc("Trade Cost Sheet", sheet_s3)
+        s3_doc.export_revenue = 150000
+        s3_doc.export_cogs = 102000
+        s3_doc.save(ignore_permissions=True)
     evaluate_case_exceptions(s3_id, auto_create=True)
     if not get_case_action_items(s3_id):
         create_action_item(s3_id, "Phối hợp Chi cục Hải quan Tiên Sa mở container kiểm hóa Luồng Đỏ", department="Customs", owner_name="Le Van C", priority="Urgent", due_date=str(today))

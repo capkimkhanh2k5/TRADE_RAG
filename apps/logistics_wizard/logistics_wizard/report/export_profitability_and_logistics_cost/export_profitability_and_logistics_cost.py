@@ -48,9 +48,9 @@ def execute(filters: Optional[Dict[str, Any]] = None) -> Tuple[List[Dict[str, An
         rev = float(r.get("export_revenue") or 0)
         cogs = float(r.get("export_cogs") or 0)
         log_c = float(r.get("export_logistics_cost") or r.get("total_actual_cost") or 0)
-        gross = float(r.get("export_gross_margin") or (rev - cogs))
-        net = float(r.get("export_net_profit") or (rev - cogs - log_c))
-        net_pct = float(r.get("export_net_margin_pct") or (round((net / rev) * 100.0, 1) if rev > 0 else 0.0))
+        gross = (rev - cogs) if rev > 0 else float(r.get("export_gross_margin") or 0)
+        net = (gross - log_c) if rev > 0 else float(r.get("export_net_profit") or (gross - log_c))
+        net_pct = round((net / rev) * 100.0, 1) if rev > 0 else float(r.get("export_net_margin_pct") or 0.0)
         data.append({
             "name": r["name"],
             "trade_case": r.get("trade_case"),
