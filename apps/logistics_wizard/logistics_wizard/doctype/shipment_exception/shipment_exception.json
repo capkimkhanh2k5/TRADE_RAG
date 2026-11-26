@@ -1,20 +1,34 @@
 {
  "actions": [],
- "autoname": "format:EXC-.YYYY.-.#####",
+ "autoname": "EXC-.YYYY.-.#####",
  "creation": "2026-10-01 16:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "section_exception",
+  "trade_case",
   "shipment_tracking",
   "purchase_order",
   "carrier",
   "container_id",
   "col_break_1",
+  "rule_code",
+  "source_module",
   "exception_type",
   "severity",
   "status",
   "raised_at",
+  "section_ownership",
+  "title",
+  "assigned_to",
+  "department",
+  "due_date",
+  "col_break_escalation",
+  "escalation_level",
+  "escalated_to",
+  "escalated_at",
+  "reference_doctype",
+  "reference_name",
   "section_impact",
   "delay_days",
   "old_eta",
@@ -22,8 +36,10 @@
   "col_break_2",
   "description",
   "section_resolution",
+  "resolved_by",
   "resolved_at",
-  "resolution_notes"
+  "resolution_notes",
+  "audit_log"
  ],
  "fields": [
   {
@@ -32,24 +48,29 @@
    "label": "Thông tin Ngoại lệ (Exception Overview)"
   },
   {
+   "fieldname": "trade_case",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hồ sơ XNK (Trade Case)",
+   "options": "Trade Case"
+  },
+  {
    "fieldname": "shipment_tracking",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Lô hàng vận chuyển (Shipment Tracking)",
-   "options": "Shipment Tracking",
-   "reqd": 1
+   "options": "Shipment Tracking"
   },
   {
    "fieldname": "purchase_order",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Đơn mua hàng liên kết (Purchase Order)",
    "options": "Purchase Order"
   },
   {
    "fieldname": "carrier",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "label": "Hãng vận chuyển (Carrier)"
   },
   {
@@ -62,11 +83,25 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "rule_code",
+   "fieldtype": "Data",
+   "label": "Mã quy tắc phát hiện (Rule Code)"
+  },
+  {
+   "default": "Shipment",
+   "fieldname": "source_module",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Phân hệ nguồn (Source Module)",
+   "options": "Shipment\nDocument\nCustoms\nCosting\nWarehouse\nManual"
+  },
+  {
    "fieldname": "exception_type",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Loại ngoại lệ (Exception Type)",
-   "options": "ETA Delay\nCarrier Rolled Cargo\nRoute Deviation\nCustoms Hold\nStale Tracking\nNetwork Failure",
+   "options": "ETA Delay\nCarrier Rolled Cargo\nRoute Deviation\nCustoms Hold\nStale Tracking\nNetwork Failure\nMissing Document\nCustoms Overdue\nCost Variance\nDemurrage/Detention Risk\nCost Not Finalized\nWarehouse Discrepancy\nWarehouse Not Ready",
    "reqd": 1
   },
   {
@@ -74,8 +109,9 @@
    "fieldname": "severity",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Mức độ nghiêm trọng (Severity)",
-   "options": "Info\nWarning\nCritical",
+   "options": "Info\nWarning\nHigh\nCritical",
    "reqd": 1
   },
   {
@@ -83,14 +119,76 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Trạng thái xử lý (Status)",
-   "options": "Open\nInvestigating\nAcknowledged\nResolved\nClosed",
+   "options": "Open\nInvestigating\nAcknowledged\nPending Vendor\nEscalated\nResolved\nClosed",
    "reqd": 1
   },
   {
    "fieldname": "raised_at",
    "fieldtype": "Datetime",
    "label": "Thời điểm phát hiện (Raised At)"
+  },
+  {
+   "fieldname": "section_ownership",
+   "fieldtype": "Section Break",
+   "label": "Phân công Trách nhiệm & Leo thang (Assignment & Escalation)"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tiêu đề sự cố (Title)"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "label": "Người xử lý (Owner)",
+   "options": "User"
+  },
+  {
+   "default": "Logistics",
+   "fieldname": "department",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Phòng ban phụ trách",
+   "options": "Logistics\nPurchasing\nCustoms\nAccounting\nWarehouse\nSales\nManagement"
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "Hạn xử lý (Due Date)"
+  },
+  {
+   "fieldname": "col_break_escalation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "escalation_level",
+   "fieldtype": "Int",
+   "label": "Cấp độ Escalation (0-2)"
+  },
+  {
+   "fieldname": "escalated_to",
+   "fieldtype": "Link",
+   "label": "Người nhận Escalation",
+   "options": "User"
+  },
+  {
+   "fieldname": "escalated_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm Escalation"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Data",
+   "label": "Chứng từ tham chiếu (DocType)"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "label": "Mã chứng từ tham chiếu"
   },
   {
    "fieldname": "section_impact",
@@ -101,7 +199,6 @@
    "default": "0",
    "fieldname": "delay_days",
    "fieldtype": "Int",
-   "in_list_view": 1,
    "label": "Số ngày trễ (Delay Days)"
   },
   {
@@ -127,7 +224,13 @@
   {
    "fieldname": "section_resolution",
    "fieldtype": "Section Break",
-   "label": "Biện pháp khắc phục (Resolution)"
+   "label": "Biện pháp khắc phục & Lịch sử Audit (Resolution & Audit)"
+  },
+  {
+   "fieldname": "resolved_by",
+   "fieldtype": "Link",
+   "label": "Người đóng sự cố",
+   "options": "User"
   },
   {
    "fieldname": "resolved_at",
@@ -138,14 +241,20 @@
    "fieldname": "resolution_notes",
    "fieldtype": "Small Text",
    "label": "Ghi chú xử lý (Resolution Notes)"
+  },
+  {
+   "fieldname": "audit_log",
+   "fieldtype": "Small Text",
+   "label": "Nhật ký xử lý & Escalation (Audit Trail)",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2026-10-01 16:00:00.000000",
+ "modified": "2026-11-26 21:38:00.000000",
  "modified_by": "Administrator",
  "module": "Logistics Wizard",
  "name": "Shipment Exception",
- "naming_rule": "Expression",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
@@ -167,8 +276,22 @@
    "write": 1
   },
   {
+   "create": 1,
    "read": 1,
-   "role": "Purchase User"
+   "role": "Stock User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Purchase User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Sales User",
+   "write": 1
   }
  ],
  "sort_field": "modified",

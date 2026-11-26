@@ -236,7 +236,7 @@ def build_route(waypoints, points_per_segment=6):
 # 3. GEOCODING (offline lookup trước, online fallback sau)
 # --------------------------------------------------------------------------
 
-def geocode_location(city, country):
+def geocode_location(city, country="", _from_routing=False):
     if not city and not country:
         return None
     query = f"{city or ''}, {country or ''}".strip(", ")
@@ -251,19 +251,20 @@ def geocode_location(city, country):
         pass
 
     # 0) Tra cứu chuẩn xác qua Routing Engine (locations.json Single Source of Truth)
-    try:
-        from .routing import get_location_coords
-        res = None
-        if city:
-            res = get_location_coords(city)
-        if not res and query:
-            res = get_location_coords(query)
-        if res:
-            coords = [float(res[0]), float(res[1])]
-            _cache_coords(cache_key, coords)
-            return coords
-    except Exception:
-        pass
+    if not _from_routing:
+        try:
+            from .routing import get_location_coords
+            res = None
+            if city:
+                res = get_location_coords(city, _allow_geocode_fallback=False)
+            if not res and query:
+                res = get_location_coords(query, _allow_geocode_fallback=False)
+            if res:
+                coords = [float(res[0]), float(res[1])]
+                _cache_coords(cache_key, coords)
+                return coords
+        except Exception:
+            pass
 
     # 1) Khớp chính xác trong OFFLINE_LOCATION_COORDINATES
     if q_lower in OFFLINE_LOCATION_COORDINATES:
@@ -279,12 +280,24 @@ def geocode_location(city, country):
             _cache_coords(cache_key, coords)
             return coords
 
+    # Skip remote Nominatim lookup for descriptive status/corridor phrases
+    non_place_phrases = (
+        "hải phận quốc tế",
+        "không phận quốc tế",
+        "tuyến đường bộ",
+        "đang vận chuyển",
+        "kho xuất khẩu nội địa",
+        "kho khách hàng quốc tế",
+    )
+    if any(kw in q_lower for kw in non_place_phrases):
+        return None
+
     # 3) Fallback online (Nominatim) khi không có trong offline DB
     url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1"
     headers = {"User-Agent": "ERPNext-LogisticsWizard-App/1.0"}
     try:
         import requests
-        r = requests.get(url, headers=headers, timeout=3)
+        r = requests.get(url, headers=headers, timeout=1.5)
         if r.status_code == 200 and r.json():
             data = r.json()[0]
             result = [float(data["lat"]), float(data["lon"])]

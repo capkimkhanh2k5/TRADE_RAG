@@ -1,0 +1,279 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-24 19:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_identity",
+  "naming_series",
+  "trade_case",
+  "trade_type",
+  "shipment_tracking",
+  "customs_declaration_ref",
+  "col_break_1",
+  "document_code",
+  "document_name",
+  "category",
+  "is_mandatory",
+  "required_before_stage",
+  "section_status",
+  "status",
+  "document_number",
+  "issuer",
+  "col_break_2",
+  "issue_date",
+  "expiry_date",
+  "deadline",
+  "section_verification",
+  "verified_by",
+  "verified_at",
+  "col_break_3",
+  "verification_notes",
+  "section_files",
+  "file_url",
+  "current_version",
+  "versions",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_identity",
+   "fieldtype": "Section Break",
+   "label": "Thông tin Chứng từ & Liên kết Hồ sơ (Document Identity)"
+  },
+  {
+   "default": "TDOC-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Mã Series",
+   "options": "TDOC-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trade_case",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hồ sơ XNK (Trade Case)",
+   "options": "Trade Case",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "trade_case.trade_type",
+   "fieldname": "trade_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Loại hình (Trade Type)",
+   "options": "\nImport\nExport"
+  },
+  {
+   "fieldname": "shipment_tracking",
+   "fieldtype": "Link",
+   "label": "Vận đơn liên kết (Shipment Tracking)",
+   "options": "Shipment Tracking"
+  },
+  {
+   "fieldname": "customs_declaration_ref",
+   "fieldtype": "Data",
+   "label": "Tham chiếu Tờ khai Hải quan"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "document_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Mã loại chứng từ (Document Code)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "document_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tên chứng từ (Document Name)",
+   "reqd": 1
+  },
+  {
+   "default": "Commercial",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Nhóm chứng từ (Category)",
+   "options": "Commercial\nTransport\nCustoms\nCompliance",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Bắt buộc (Mandatory)"
+  },
+  {
+   "default": "Customs",
+   "fieldname": "required_before_stage",
+   "fieldtype": "Select",
+   "label": "Yêu cầu trước chặng (Required Before Stage)",
+   "options": "\nBooking\nExport Port\nIn Transit\nImport Port\nCustoms\nWarehouse\nCost Finalization\nClosed"
+  },
+  {
+   "fieldname": "section_status",
+   "fieldtype": "Section Break",
+   "label": "Trạng thái & Hiệu lực Chứng từ (Status & Validity)"
+  },
+  {
+   "default": "Required",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trạng thái (Status)",
+   "options": "Required\nReceived\nVerified\nMissing\nExpired\nN/A",
+   "reqd": 1
+  },
+  {
+   "fieldname": "document_number",
+   "fieldtype": "Data",
+   "label": "Số hiệu chứng từ (Document No.)"
+  },
+  {
+   "fieldname": "issuer",
+   "fieldtype": "Data",
+   "label": "Đơn vị phát hành (Issuer)"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "label": "Ngày phát hành (Issue Date)"
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Ngày hết hạn (Expiry Date)"
+  },
+  {
+   "fieldname": "deadline",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Hạn chót phải nộp (Deadline)"
+  },
+  {
+   "fieldname": "section_verification",
+   "fieldtype": "Section Break",
+   "label": "Kiểm duyệt Chứng từ (Verification)"
+  },
+  {
+   "fieldname": "verified_by",
+   "fieldtype": "Link",
+   "label": "Người kiểm duyệt (Verified By)",
+   "options": "User"
+  },
+  {
+   "fieldname": "verified_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm kiểm duyệt (Verified At)"
+  },
+  {
+   "fieldname": "col_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "verification_notes",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú kiểm duyệt (Verification Notes)"
+  },
+  {
+   "fieldname": "section_files",
+   "fieldtype": "Section Break",
+   "label": "Tệp đính kèm & Lịch sử Phiên bản (Files & Versioning)"
+  },
+  {
+   "fieldname": "file_url",
+   "fieldtype": "Attach",
+   "label": "Tệp hiệu lực hiện tại (Current File)"
+  },
+  {
+   "default": "0",
+   "fieldname": "current_version",
+   "fieldtype": "Int",
+   "label": "Phiên bản hiện tại (Current Version)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "versions",
+   "fieldtype": "Table",
+   "label": "Lịch sử phiên bản (Version History)",
+   "options": "Trade Document Version"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú bổ sung (Remarks)"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-24 19:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Logistics Wizard",
+ "name": "Trade Document",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

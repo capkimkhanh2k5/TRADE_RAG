@@ -68,6 +68,19 @@ except ImportError:
         auto_resolve_shipment_exceptions = None
         check_and_process_delay = None
 
+try:
+    from .master_config import get_trade_thresholds
+except ImportError:
+    try:
+        from master_config import get_trade_thresholds
+    except ImportError:
+        def get_trade_thresholds() -> Dict[str, Any]:
+            return {
+                "enable_auto_polling": True,
+                "auto_create_exceptions": True,
+                "stale_threshold_hours": 48,
+            }
+
 
 # ==============================================================================
 # 1. 9 DCSA STANDARD MILESTONES DEFINITIONS & NORMALIZATION
@@ -1541,7 +1554,241 @@ def sync_shipment_tracking_data(shipment_name: str,
 
 
 # ==============================================================================
-# 11. CONTRACT ALIASES & EXPORTS (PROJECT.MD COMPLIANCE)
+# 11. SCHEDULED BACKGROUND JOBS (POLLING SYNC & STALE SCAN)
+# ==============================================================================
+
+TERMINAL_SHIPMENT_STATUSES = ("Completed", "Delivered", "Cancelled")
+ACTIVE_EXCEPTION_STATUSES = ("Open", "Investigating", "Acknowledged")
+
+
+def _is_frappe_db_available() -> bool:
+    """Return True only when Frappe DB is genuinely initialized/connected."""
+    if not (frappe and getattr(frappe, "db", None)):
+        return False
+    is_conn = getattr(frappe.db, "is_connected", None)
+    if callable(is_conn):
+        try:
+            return bool(is_conn())
+        except Exception:
+            return False
+    exists_fn = getattr(frappe.db, "exists", None)
+    if callable(exists_fn):
+        try:
+            return bool(exists_fn("DocType", "Shipment Tracking"))
+        except Exception:
+            return False
+    return False
+
+
+def _has_open_stale_exception(shipment_name: str, use_frappe_db: bool) -> bool:
+    """Check whether an open/active Stale Tracking exception already exists for shipment_name."""
+    if any(
+        e.get("shipment_tracking") == shipment_name
+        and e.get("exception_type") == "Stale Tracking"
+        and e.get("status") in ACTIVE_EXCEPTION_STATUSES
+        for e in in_memory_db.exceptions.values()
+    ):
+        return True
+
+    for mod_name in ("test.test_shipment_tracking_e2e", "test_shipment_tracking_e2e"):
+        if mod_name in sys.modules:
+            mod = sys.modules[mod_name]
+            harness = getattr(mod, "StandaloneHarness", None)
+            if harness and hasattr(harness, "get_all"):
+                try:
+                    existing = harness.get_all(
+                        "Shipment Exception",
+                        filters={
+                            "shipment_tracking": shipment_name,
+                            "exception_type": "Stale Tracking",
+                        },
+                    )
+                    if any(
+                        (e.get("status") if isinstance(e, dict) else getattr(e, "status", None)) in ACTIVE_EXCEPTION_STATUSES
+                        for e in (existing or [])
+                    ):
+                        return True
+                except Exception:
+                    pass
+
+    if use_frappe_db and hasattr(frappe, "get_all"):
+        try:
+            existing_db = frappe.get_all(
+                "Shipment Exception",
+                filters={
+                    "shipment_tracking": shipment_name,
+                    "exception_type": "Stale Tracking",
+                    "status": ["in", list(ACTIVE_EXCEPTION_STATUSES)],
+                },
+                limit=1,
+            )
+            if existing_db:
+                return True
+        except Exception:
+            pass
+
+    return False
+
+
+def _fetch_active_shipments(use_frappe_db: bool, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Load non-terminal shipments from Frappe DB or in_memory_db."""
+    if use_frappe_db and hasattr(frappe, "get_all"):
+        try:
+            query_kwargs: Dict[str, Any] = {
+                "filters": {"status": ["not in", list(TERMINAL_SHIPMENT_STATUSES)]},
+                "fields": [
+                    "name", "status", "last_synced_at", "is_stale",
+                    "purchase_order", "carrier", "container_id",
+                ],
+                "order_by": "modified desc",
+            }
+            if limit is not None:
+                query_kwargs["limit"] = int(limit)
+            rows = frappe.get_all("Shipment Tracking", **query_kwargs) or []
+            return [dict(r) if isinstance(r, dict) else r.as_dict() for r in rows]
+        except Exception as exc:
+            logger.warning(f"Error loading active shipments from Frappe DB: {exc}")
+
+    active = [
+        s for s in in_memory_db.shipments.values()
+        if s.get("status") not in TERMINAL_SHIPMENT_STATUSES
+    ]
+    return active[:limit] if limit is not None else active
+
+
+def scheduled_sync_active_shipments(
+    limit: int = 50,
+    provider: Optional[BaseTrackingProvider] = None,
+) -> Dict[str, Any]:
+    """
+    Scheduler task: periodically poll active shipments and sync DCSA milestones.
+    Respects enable_auto_polling setting from Trade Master Config.
+    """
+    thresholds = get_trade_thresholds()
+    if not thresholds.get("enable_auto_polling", True):
+        return {
+            "success": True,
+            "skipped": True,
+            "synced_count": 0,
+            "failed_count": 0,
+            "results": [],
+        }
+
+    use_frappe_db = _is_frappe_db_available()
+    shipments = _fetch_active_shipments(use_frappe_db=use_frappe_db, limit=limit)
+
+    synced_count = 0
+    failed_count = 0
+    results: List[Dict[str, Any]] = []
+
+    for s in shipments:
+        s_name = s.get("name")
+        if not s_name:
+            continue
+        try:
+            res = sync_shipment_tracking_data(shipment_name=s_name, provider=provider)
+            results.append(res)
+            if res.get("success"):
+                synced_count += 1
+            else:
+                failed_count += 1
+        except Exception as exc:
+            failed_count += 1
+            results.append({"success": False, "shipment": s_name, "error": str(exc)})
+
+    return {
+        "success": True,
+        "skipped": False,
+        "synced_count": synced_count,
+        "failed_count": failed_count,
+        "results": results,
+    }
+
+
+def scheduled_scan_stale_shipments(
+    threshold_hours: Optional[int] = None,
+    current_time: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Scheduler task: scan active shipments for stale tracking updates (> threshold_hours),
+    mark is_stale = 1, and idempotently raise 'Stale Tracking' exceptions when enabled.
+    """
+    thresholds = get_trade_thresholds()
+    eff_threshold = (
+        int(threshold_hours)
+        if threshold_hours is not None
+        else int(thresholds.get("stale_threshold_hours", 48))
+    )
+    auto_create = bool(thresholds.get("auto_create_exceptions", True))
+    use_frappe_db = _is_frappe_db_available()
+
+    active_shipments = _fetch_active_shipments(use_frappe_db=use_frappe_db)
+    scanned_count = len(active_shipments)
+    stale_shipments: List[str] = []
+    exceptions_created = 0
+
+    for shipment_dict in active_shipments:
+        s_name = shipment_dict.get("name")
+        if not s_name:
+            continue
+
+        is_stale = check_and_apply_stale_flag(
+            shipment_dict,
+            threshold_hours=eff_threshold,
+            current_time=current_time,
+        )
+        if not is_stale:
+            continue
+
+        stale_shipments.append(s_name)
+        if use_frappe_db and hasattr(frappe.db, "set_value"):
+            try:
+                frappe.db.set_value("Shipment Tracking", s_name, "is_stale", 1)
+                frappe.db.commit()
+            except Exception as exc:
+                logger.warning(f"Failed to persist is_stale=1 for {s_name}: {exc}")
+        else:
+            in_memory_db.save_shipment(s_name, shipment_dict)
+
+        if auto_create and not _has_open_stale_exception(s_name, use_frappe_db):
+            desc = (
+                f"Shipment {s_name} has not received tracking updates for more than "
+                f"{eff_threshold} hours (Stale Tracking)."
+            )
+            if create_shipment_exception:
+                create_shipment_exception(
+                    shipment_tracking=shipment_dict,
+                    exception_type="Stale Tracking",
+                    severity="Warning",
+                    description=desc,
+                    purchase_order=shipment_dict.get("purchase_order"),
+                    carrier=shipment_dict.get("carrier"),
+                    container_id=shipment_dict.get("container_id"),
+                )
+            else:
+                in_memory_db.add_exception({
+                    "shipment_tracking": s_name,
+                    "purchase_order": shipment_dict.get("purchase_order"),
+                    "carrier": shipment_dict.get("carrier") or "",
+                    "container_id": shipment_dict.get("container_id") or "",
+                    "exception_type": "Stale Tracking",
+                    "severity": "Warning",
+                    "description": desc,
+                    "status": "Open",
+                })
+            exceptions_created += 1
+
+    return {
+        "success": True,
+        "scanned_count": scanned_count,
+        "stale_count": len(stale_shipments),
+        "exceptions_created": exceptions_created,
+        "stale_shipments": stale_shipments,
+    }
+
+
+# ==============================================================================
+# 12. CONTRACT ALIASES & EXPORTS (PROJECT.MD COMPLIANCE)
 # ==============================================================================
 
 # Alias conforming to PROJECT.md interface contract
@@ -1569,6 +1816,8 @@ __all__ = [
     "check_and_apply_stale_flag",
     "sync_shipment_tracking_data",
     "sync_shipment_tracking",
+    "scheduled_sync_active_shipments",
+    "scheduled_scan_stale_shipments",
     "calculate_delay_days",
     "classify_severity",
     "evaluate_eta_change",

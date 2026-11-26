@@ -2,8 +2,10 @@
 # For license information, please see license.txt
 
 try:
+    import frappe
     from frappe.model.document import Document
 except ImportError:
+    frappe = None
     class Document:
         def __init__(self, *args, **kwargs):
             self.__dict__.update(kwargs)
@@ -28,6 +30,29 @@ class ShipmentTracking(Document):
     """
 
     def validate(self):
+        # Auto-resolve flow_type and customer metadata for Export shipments
+        has_po = bool(getattr(self, "purchase_order", None))
+        has_export_ref = bool(getattr(self, "sales_order", None) or getattr(self, "delivery_note", None))
+        if not has_po and has_export_ref:
+            self.flow_type = "Export"
+        elif not getattr(self, "flow_type", None):
+            self.flow_type = "Import"
+
+        if (
+            self.flow_type == "Export"
+            and getattr(self, "sales_order", None)
+            and not getattr(self, "customer", None)
+            and frappe
+            and getattr(frappe, "db", None)
+            and hasattr(frappe.db, "get_value")
+        ):
+            try:
+                customer = frappe.db.get_value("Sales Order", self.sales_order, "customer")
+                if customer:
+                    self.customer = customer
+            except Exception:
+                pass
+
         # Auto-synchronize alias fields for backward compatibility
         if hasattr(self, "container_id") and self.container_id:
             self.container_no = self.container_id

@@ -550,7 +550,7 @@ class TradeCaseOverviewController {
                 }
             }
         });
-        this.load_case(this.currentCaseId || "IMP-2026-001");
+        this.load_case(this.currentCaseId || "");
     }
 
     bind_events() {
@@ -610,47 +610,232 @@ class TradeCaseOverviewController {
             self.attempt_close_case();
         });
 
-        // Quick actions: Document Upload, Customs, Cost, Exceptions
+        // Quick actions: Wired to real Phase 2-5 Backend APIs
         $(document).on('click', '#btn-upload-doc', function () {
-            frappe.msgprint({
-                title: __('Upload Document'),
-                message: __('Chức năng tải lên và phân loại chứng từ (C/O, D/O, Packing List) sẽ kết nối với Module Document Readiness.'),
-                indicator: 'blue'
-            });
+            const caseId = (self.currentData && self.currentData.case_id) || self.currentCaseId;
+            frappe.prompt([
+                {
+                    fieldname: 'document_code',
+                    fieldtype: 'Select',
+                    label: 'Loại chứng từ (Document Code)',
+                    options: 'DOC-CI\nDOC-PL\nDOC-BL\nDOC-AWB\nDOC-CO\nDOC-INS\nDOC-DO\nDOC-CUS-IMP\nDOC-CUS-EXP\nDOC-LIC',
+                    default: 'DOC-CO',
+                    reqd: 1
+                },
+                { fieldname: 'file_url', fieldtype: 'Attach', label: 'Tệp đính kèm (File)', reqd: 1 },
+                { fieldname: 'document_number', fieldtype: 'Data', label: 'Số chứng từ' },
+                { fieldname: 'expiry_date', fieldtype: 'Date', label: 'Ngày hết hạn (nếu có)' },
+                { fieldname: 'change_notes', fieldtype: 'Data', label: 'Ghi chú phiên bản', default: 'Uploaded from Trade Case Overview' }
+            ], function (vals) {
+                frappe.call({
+                    method: 'logistics_wizard.document_engine.api.upload_trade_document_version',
+                    args: {
+                        case_id: caseId,
+                        document_code: vals.document_code,
+                        file_url: vals.file_url,
+                        document_number: vals.document_number,
+                        expiry_date: vals.expiry_date,
+                        change_notes: vals.change_notes
+                    },
+                    callback: function (r) {
+                        const res = r.message || {};
+                        if (res.success) {
+                            frappe.show_alert({
+                                message: __(`Đã tải lên ${res.document_code} (v${res.current_version}) — Trạng thái: ${res.status}`),
+                                indicator: 'green'
+                            });
+                            self.load_case(caseId);
+                        } else {
+                            frappe.msgprint({ title: __('Lỗi tải chứng từ'), message: res.error || 'Không thể lưu chứng từ.', indicator: 'red' });
+                        }
+                    }
+                });
+            }, __('Tải lên Chứng từ Xuất Nhập Khẩu'), __('Lưu chứng từ'));
         });
 
         $(document).on('click', '#btn-update-customs', function () {
-            frappe.msgprint({
-                title: __('Update Customs'),
-                message: __('Chức năng cập nhật tiến độ tờ khai điện tử VNACCS và rà soát mã HS RAG.'),
-                indicator: 'blue'
-            });
+            const caseId = (self.currentData && self.currentData.case_id) || self.currentCaseId;
+            const declName = (self.currentData && self.currentData.customs_readiness && self.currentData.customs_readiness.declaration_name) || '';
+            if (!declName) {
+                frappe.prompt([
+                    { fieldname: 'customs_office_code', fieldtype: 'Data', label: 'Mã Chi cục Hải quan (VD: 02CI, 03CC)', default: '02CI' },
+                    { fieldname: 'co_form', fieldtype: 'Select', label: 'Mẫu C/O ưu đãi', options: 'None\nForm E (ACFTA)\nForm D (ATIGA)\nEUR.1 (EVFTA)\nCPTPP\nForm B (Non-Preferential)', default: 'None' },
+                    { fieldname: 'item_name', fieldtype: 'Data', label: 'Tên mặt hàng chính', reqd: 1 },
+                    { fieldname: 'qty', fieldtype: 'Float', label: 'Số lượng', default: 1, reqd: 1 },
+                    { fieldname: 'unit_price', fieldtype: 'Currency', label: 'Đơn giá khai báo', default: 100, reqd: 1 },
+                    { fieldname: 'suggested_hs_code', fieldtype: 'Data', label: 'Mã HS đề xuất (8 chữ số)' }
+                ], function (vals) {
+                    frappe.call({
+                        method: 'logistics_wizard.customs_engine.api.create_customs_declaration',
+                        args: {
+                            case_id: caseId,
+                            customs_office_code: vals.customs_office_code,
+                            co_form: vals.co_form,
+                            items: JSON.stringify([{
+                                item_name: vals.item_name,
+                                qty: vals.qty,
+                                unit_price: vals.unit_price,
+                                suggested_hs_code: vals.suggested_hs_code || '',
+                                hs_approval_status: vals.suggested_hs_code ? 'Proposed' : 'Pending',
+                                vat_rate: 10
+                            }])
+                        },
+                        callback: function (r) {
+                            const res = r.message || {};
+                            if (res.success) {
+                                frappe.show_alert({ message: __(`Đã lập tờ khai Hải quan ${res.name}`), indicator: 'green' });
+                                self.load_case(caseId);
+                            } else {
+                                frappe.msgprint({ title: __('Lỗi lập tờ khai'), message: res.error || 'Không thể tạo tờ khai.', indicator: 'red' });
+                            }
+                        }
+                    });
+                }, __('Khởi tạo Tờ khai Hải quan'), __('Tạo tờ khai'));
+                return;
+            }
+
+            frappe.prompt([
+                { fieldname: 'target_status', fieldtype: 'Select', label: 'Chuyển trạng thái quy trình', options: 'Ready\nDeclared\nProcessing\nCleared\nRejected\nPreparing', default: 'Ready', reqd: 1 },
+                { fieldname: 'declaration_no', fieldtype: 'Data', label: 'Số tờ khai VNACCS/VCIS', default: (self.currentData.customs_readiness && self.currentData.customs_readiness.declaration_no) || '' },
+                { fieldname: 'customs_lane', fieldtype: 'Select', label: 'Phân luồng Hải quan', options: 'Not Declared\nGreen\nYellow\nRed', default: (self.currentData.customs_readiness && self.currentData.customs_readiness.channel) || 'Green' },
+                { fieldname: 'rejection_reason', fieldtype: 'Small Text', label: 'Lý do từ chối / Ghi chú (nếu Rejected)' }
+            ], function (vals) {
+                frappe.call({
+                    method: 'logistics_wizard.customs_engine.api.advance_customs_workflow',
+                    args: {
+                        declaration_name: declName,
+                        target_status: vals.target_status,
+                        declaration_no: vals.declaration_no || undefined,
+                        customs_lane: vals.customs_lane,
+                        rejection_reason: vals.rejection_reason || undefined
+                    },
+                    callback: function (r) {
+                        const res = r.message || {};
+                        if (res.success) {
+                            frappe.show_alert({ message: __(`Đã cập nhật ${declName} → ${res.workflow_status} (${res.customs_lane})`), indicator: 'green' });
+                            self.load_case(caseId);
+                        } else {
+                            frappe.msgprint({ title: __('Chặn cập nhật Hải quan'), message: res.error || 'Không thể chuyển trạng thái tờ khai.', indicator: 'red' });
+                        }
+                    }
+                });
+            }, __(`Cập nhật Tờ khai ${declName}`), __('Cập nhật'));
         });
 
         $(document).on('click', '#btn-add-cost', function () {
-            frappe.msgprint({
-                title: __('Add Cost Invoice'),
-                message: __('Chức năng ghi nhận chi phí phát sinh và cập nhật Landed Cost Voucher.'),
-                indicator: 'blue'
-            });
+            const caseId = (self.currentData && self.currentData.case_id) || self.currentCaseId;
+            frappe.prompt([
+                {
+                    fieldname: 'cost_type',
+                    fieldtype: 'Select',
+                    label: 'Loại chi phí (Cost Type)',
+                    options: 'Freight\nInsurance\nDuty\nTax\nPort\nHandling\nStorage\nDemurrage/Detention\nTrucking\nBroker Fee\nOther',
+                    default: 'Freight',
+                    reqd: 1
+                },
+                { fieldname: 'cost_description', fieldtype: 'Data', label: 'Diễn giải chi phí', reqd: 1 },
+                { fieldname: 'invoice_number', fieldtype: 'Data', label: 'Số hóa đơn' },
+                { fieldname: 'estimated_cost', fieldtype: 'Currency', label: 'Chi phí dự toán (Estimated)', default: 0 },
+                { fieldname: 'actual_cost', fieldtype: 'Currency', label: 'Chi phí thực tế (Actual)', default: 0, reqd: 1 },
+                { fieldname: 'status', fieldtype: 'Select', label: 'Trạng thái đối soát', options: 'Draft\nVerified', default: 'Verified' }
+            ], function (vals) {
+                frappe.call({
+                    method: 'logistics_wizard.costing_engine.api.add_cost_item_to_case',
+                    args: {
+                        case_id: caseId,
+                        cost_type: vals.cost_type,
+                        cost_description: vals.cost_description,
+                        invoice_number: vals.invoice_number,
+                        estimated_cost: vals.estimated_cost,
+                        actual_cost: vals.actual_cost,
+                        status: vals.status
+                    },
+                    callback: function (r) {
+                        const res = r.message || {};
+                        if (res.success) {
+                            frappe.show_alert({ message: __(`Đã ghi nhận chi phí vào ${res.cost_sheet_name}`), indicator: 'green' });
+                            self.load_case(caseId);
+                        } else {
+                            frappe.msgprint({ title: __('Lỗi ghi nhận chi phí'), message: res.error || 'Không thể lưu dòng chi phí.', indicator: 'red' });
+                        }
+                    }
+                });
+            }, __('Ghi nhận Hóa đơn Chi phí (Trade Cost)'), __('Lưu chi phí'));
         });
 
         $(document).on('click', '#btn-create-exception', function () {
-            frappe.msgprint({
-                title: __('Create Exception'),
-                message: __('Khai báo sự cố vận chuyển mới (Trễ lịch, hư hỏng cont, phát sinh phí).'),
-                indicator: 'orange'
-            });
+            const caseId = (self.currentData && self.currentData.case_id) || self.currentCaseId;
+            frappe.prompt([
+                {
+                    fieldname: 'exception_type',
+                    fieldtype: 'Select',
+                    label: 'Loại sự cố',
+                    options: 'ETA Delay\nMissing Document\nCustoms Hold\nCustoms Overdue\nCost Variance\nDemurrage/Detention Risk\nWarehouse Discrepancy\nWarehouse Not Ready\nStale Tracking',
+                    default: 'ETA Delay',
+                    reqd: 1
+                },
+                { fieldname: 'severity', fieldtype: 'Select', label: 'Mức độ nghiêm trọng', options: 'Info\nWarning\nHigh\nCritical', default: 'High', reqd: 1 },
+                { fieldname: 'department', fieldtype: 'Select', label: 'Phòng ban phụ trách', options: 'Logistics\nPurchasing\nCustoms\nAccounting\nWarehouse\nSales', default: 'Logistics' },
+                { fieldname: 'title', fieldtype: 'Data', label: 'Tiêu đề sự cố', reqd: 1 },
+                { fieldname: 'description', fieldtype: 'Small Text', label: 'Mô tả chi tiết', reqd: 1 },
+                { fieldname: 'due_date', fieldtype: 'Date', label: 'Hạn xử lý', default: frappe.datetime.nowdate() }
+            ], function (vals) {
+                frappe.call({
+                    method: 'logistics_wizard.exception_engine.api.raise_exception_from_rule',
+                    args: {
+                        case_id: caseId,
+                        rule_code: '',
+                        exception_type: vals.exception_type,
+                        severity: vals.severity,
+                        title: vals.title,
+                        description: vals.description,
+                        department: vals.department,
+                        source_module: 'Manual',
+                        due_date: vals.due_date
+                    },
+                    callback: function (r) {
+                        const res = r.message || {};
+                        if (res.success) {
+                            frappe.show_alert({ message: __(`Đã khai báo sự cố ${res.name}`), indicator: 'orange' });
+                            self.load_case(caseId);
+                        } else {
+                            frappe.msgprint({ title: __('Lỗi tạo sự cố'), message: res.error || 'Không thể lưu sự cố.', indicator: 'red' });
+                        }
+                    }
+                });
+            }, __('Khai báo Sự cố Vận hành Mới'), __('Tạo sự cố'));
         });
 
         $(document).on('click', '#btn-add-action', function () {
+            const caseId = (self.currentData && self.currentData.case_id) || self.currentCaseId;
             frappe.prompt([
                 { fieldname: 'action', fieldtype: 'Data', label: 'Nội dung hành động', reqd: 1 },
-                { fieldname: 'department', fieldtype: 'Select', label: 'Phòng ban', options: 'Logistics\nCustoms\nPurchasing\nAccounting\nWarehouse', default: 'Logistics' },
+                { fieldname: 'department', fieldtype: 'Select', label: 'Phòng ban', options: 'Logistics\nCustoms\nPurchasing\nAccounting\nWarehouse\nSales', default: 'Logistics' },
+                { fieldname: 'owner_name', fieldtype: 'Data', label: 'Người phụ trách', default: (frappe.session && frappe.session.user) || 'Administrator' },
+                { fieldname: 'priority', fieldtype: 'Select', label: 'Ưu tiên', options: 'Low\nMedium\nHigh\nUrgent', default: 'Medium' },
                 { fieldname: 'due_date', fieldtype: 'Date', label: 'Hạn xử lý', default: frappe.datetime.nowdate() }
             ], function (vals) {
-                frappe.show_alert({ message: `Đã thêm việc cần làm: ${vals.action}`, indicator: 'green' });
-            }, 'Thêm Hành Động Tiếp Theo');
+                frappe.call({
+                    method: 'logistics_wizard.exception_engine.api.create_action_item',
+                    args: {
+                        case_id: caseId,
+                        action_title: vals.action,
+                        department: vals.department,
+                        owner_name: vals.owner_name,
+                        priority: vals.priority,
+                        due_date: vals.due_date
+                    },
+                    callback: function (r) {
+                        const res = r.message || {};
+                        if (res.success) {
+                            frappe.show_alert({ message: __(`Đã thêm đầu việc ${res.name}: ${vals.action}`), indicator: 'green' });
+                            self.load_case(caseId);
+                        } else {
+                            frappe.msgprint({ title: __('Lỗi thêm đầu việc'), message: res.error || 'Không thể lưu hành động.', indicator: 'red' });
+                        }
+                    }
+                });
+            }, __('Thêm Hành Động Tiếp Theo'), __('Lưu đầu việc'));
         });
     }
 
@@ -2480,7 +2665,7 @@ class EmbeddedTradeCostDashboardController {
 
     init() {
         this.bind_events();
-        this.load_data(this.currentCaseId);
+        this.load_data('');
     }
 
     get_mock_cases_data() {
@@ -2590,10 +2775,57 @@ class EmbeddedTradeCostDashboardController {
         };
     }
 
-    load_data(caseId) {
-        this.currentCaseId = caseId || 'IMP-2026-001';
-        $('#tcd-case-selector').val(this.currentCaseId);
-        this.render_dashboard();
+    load_data(caseId, tradeTypeFilter) {
+        const self = this;
+        const requestedCase = caseId !== undefined ? caseId : (this.currentCaseId || '');
+        const filterType = tradeTypeFilter !== undefined ? tradeTypeFilter : (this.currentCaseType === 'all' ? '' : this.currentCaseType);
+
+        if (typeof frappe !== 'undefined' && frappe.call) {
+            frappe.call({
+                method: 'logistics_wizard.costing_engine.api.get_cost_dashboard_data',
+                args: {
+                    case_id: requestedCase || undefined,
+                    trade_type_filter: filterType || undefined
+                },
+                callback: function (r) {
+                    const live = r && r.message;
+                    if (live && live.success) {
+                        self.liveData = live;
+                        self.currentCaseId = live.case_id || requestedCase;
+                        self.populate_case_selector(live.available_cases || [], self.currentCaseId);
+                        self.render_dashboard();
+                    } else {
+                        self.liveData = null;
+                        self.currentCaseId = requestedCase || 'IMP-2026-001';
+                        $('#tcd-case-selector').val(self.currentCaseId);
+                        self.render_dashboard();
+                    }
+                },
+                error: function () {
+                    self.liveData = null;
+                    self.currentCaseId = requestedCase || 'IMP-2026-001';
+                    $('#tcd-case-selector').val(self.currentCaseId);
+                    self.render_dashboard();
+                }
+            });
+        } else {
+            this.currentCaseId = requestedCase || 'IMP-2026-001';
+            $('#tcd-case-selector').val(this.currentCaseId);
+            this.render_dashboard();
+        }
+    }
+
+    populate_case_selector(cases, selectedId) {
+        if (!cases || !cases.length) return;
+        const $sel = $('#tcd-case-selector');
+        if (!$sel.length) return;
+        let opts = '';
+        cases.forEach(c => {
+            const selAttr = c.case_id === selectedId ? ' selected' : '';
+            opts += `<option value="${c.case_id}"${selAttr}>${c.label || c.case_id}</option>`;
+        });
+        $sel.html(opts);
+        if (selectedId) $sel.val(selectedId);
     }
 
     bind_events() {
@@ -2620,11 +2852,11 @@ class EmbeddedTradeCostDashboardController {
         $(document).on('click', '#tcd-btn-refresh', function () {
             const $icon = $(this).find('i');
             $icon.addClass('fa-spin');
+            self.load_data(self.currentCaseId);
             setTimeout(() => {
-                self.load_data(self.currentCaseId);
                 $icon.removeClass('fa-spin');
-                frappe.show_alert({ message: __('Đã làm mới dữ liệu Trade Cost!'), indicator: 'green' });
-            }, 300);
+                frappe.show_alert({ message: __('Đã làm mới dữ liệu Trade Cost từ hệ thống!'), indicator: 'green' });
+            }, 400);
         });
 
         $(document).on('click', '#tcd-btn-new-sheet', function () {
@@ -2636,71 +2868,125 @@ class EmbeddedTradeCostDashboardController {
         });
 
         $(document).on('click', '#tcd-btn-sync-lcv, #tcd-btn-apply-lcv', function () {
-            frappe.show_alert({
-                message: __('Đang tiến hành đồng bộ dữ liệu sang Landed Cost Voucher...'),
-                indicator: 'green'
-            });
-            setTimeout(() => {
-                frappe.show_alert({
-                    message: __('Đồng bộ Landed Cost Voucher thành công!'),
-                    indicator: 'green'
+            const c = self.get_active_case_data();
+            const sheetName = c && c.cost_sheet_name;
+            if (!sheetName) {
+                frappe.msgprint({
+                    title: __('Chưa có Trade Cost Sheet'),
+                    message: __(`Hồ sơ <strong>${self.currentCaseId}</strong> chưa có bảng chi phí (Trade Cost Sheet) để đồng bộ Landed Cost Voucher.`),
+                    indicator: 'orange'
                 });
-            }, 600);
+                return;
+            }
+            frappe.call({
+                method: 'logistics_wizard.costing_engine.api.allocate_and_sync_lcv',
+                args: { cost_sheet_name: sheetName, auto_submit: false },
+                callback: function (r) {
+                    const res = r && r.message ? r.message : {};
+                    if (res.success) {
+                        frappe.show_alert({
+                            message: __(`Đồng bộ Landed Cost Voucher thành công: ${res.lcv_name || sheetName}`),
+                            indicator: 'green'
+                        });
+                        self.load_data(self.currentCaseId);
+                    } else {
+                        frappe.msgprint({
+                            title: __('Không thể đồng bộ LCV'),
+                            message: res.error || __('Vui lòng kiểm tra Purchase Receipt và các dòng chi phí trước khi đồng bộ.'),
+                            indicator: 'red'
+                        });
+                    }
+                }
+            });
         });
     }
 
-    apply_type_filter() {
-        const type = this.currentCaseType;
-        if (type === 'export') {
-            $('#tcd-case-selector').val('EXP-2026-002');
-            this.load_data('EXP-2026-002');
-        } else if (type === 'import') {
-            $('#tcd-case-selector').val('IMP-2026-001');
-            this.load_data('IMP-2026-001');
-        } else {
-            this.load_data(this.currentCaseId);
+    get_active_case_data() {
+        if (this.liveData && this.liveData.success) {
+            return this.liveData;
         }
+        return this.caseData[this.currentCaseId] || this.caseData['IMP-2026-001'];
+    }
+
+    apply_type_filter() {
+        const filterVal = this.currentCaseType === 'all' ? '' : this.currentCaseType;
+        this.load_data('', filterVal);
     }
 
     render_dashboard() {
-        const c = this.caseData[this.currentCaseId] || this.caseData['IMP-2026-001'];
+        const c = this.get_active_case_data();
         if (!c) return;
 
-        $('#tcd-kpi-po-val').text('$' + c.po_value.toLocaleString('en-US', { minimumFractionDigits: 2 }));
-        $('#tcd-kpi-est-val').text('$' + c.estimated_cost.toLocaleString('en-US', { minimumFractionDigits: 2 }));
-        $('#tcd-kpi-act-val').text('$' + c.actual_cost.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+        const poVal = Number(c.po_value || 0);
+        const estVal = Number(c.estimated_cost || 0);
+        const actVal = Number(c.actual_cost || 0);
+        const varAmt = Number(c.variance_amount || 0);
+        const varPct = Number(c.variance_pct || 0);
 
-        const varSign = c.variance_amount > 0 ? '+' : '';
-        const varPctSign = c.variance_pct > 0 ? '+' : '';
-        const varText = `${varSign}$${c.variance_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} (${varPctSign}${c.variance_pct}%)`;
+        $('#tcd-kpi-po-val').text('$' + poVal.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+        $('#tcd-kpi-est-val').text('$' + estVal.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+        $('#tcd-kpi-act-val').text('$' + actVal.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+
+        const varSign = varAmt > 0 ? '+' : '';
+        const varPctSign = varPct > 0 ? '+' : '';
+        const varText = `${varSign}$${varAmt.toLocaleString('en-US', { minimumFractionDigits: 2 })} (${varPctSign}${varPct}%)`;
         $('#tcd-kpi-var-val').text(varText);
 
-        if (c.variance_amount > 0) {
+        if (varAmt > 0) {
             $('#tcd-kpi-var-val').css('color', '#dc2626');
-        } else if (c.variance_amount < 0) {
+        } else if (varAmt < 0) {
             $('#tcd-kpi-var-val').css('color', '#059669');
         } else {
             $('#tcd-kpi-var-val').css('color', '#64748b');
         }
 
-        $('#tcd-status-badge').attr('class', 'badge-status ' + (c.status_class || 'badge-in-transit')).text(c.status);
+        $('#tcd-status-badge').attr('class', 'badge-status ' + (c.status_class || 'badge-in-transit')).text(c.status || 'DRAFT');
         $('#tcd-lcv-badge').text(c.lcv_id || 'Chưa liên kết');
 
         this.render_cost_items(c.cost_items || []);
         this.render_allocation_table();
         this.render_audit_checks(c.audit_checks || []);
+        this.render_export_profitability(c);
+    }
 
-        if (c.case_type === 'export') {
-            $('#tcd-export-profitability-box').show();
-        } else {
+    render_export_profitability(c) {
+        if ((c.case_type || '').toLowerCase() !== 'export') {
             $('#tcd-export-profitability-box').hide();
+            return;
         }
+        const ep = c.export_profitability || {};
+        const rev = Number(ep.export_revenue ?? c.export_revenue ?? c.po_value ?? 0);
+        const cogs = Number(ep.export_cogs ?? c.export_cogs ?? 0);
+        const logCost = Number(ep.export_logistics_cost ?? c.export_logistics ?? c.actual_cost ?? 0);
+        const netProfit = Number(ep.export_net_profit ?? (rev - cogs - logCost));
+        const marginPct = Number(ep.export_net_margin_pct ?? (rev > 0 ? ((netProfit / rev) * 100).toFixed(1) : 0));
+        $('#tcd-export-profitability-box').html(`
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 12.5px; font-weight: 700; color: #0f172a;"><i class="fa fa-bar-chart" style="color: #059669;"></i> Hiệu Quả Lô Xuất Khẩu (Export Margin)</span>
+                <span class="delay-tag-ontime">${marginPct >= 0 ? '+' : ''}${marginPct}% Biên Lợi Nhuận</span>
+            </div>
+            <table class="table tc-table" style="margin-bottom: 0;">
+                <tr><td class="label-col">Doanh thu xuất khẩu:</td><td class="val-col text-right">$${rev.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td class="label-col">Giá vốn hàng bán (COGS):</td><td class="val-col text-right">$${cogs.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td class="label-col">Chi phí logistics xuất khẩu:</td><td class="val-col text-right">$${logCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+                <tr style="border-top: 1px solid #e2e8f0; font-weight: 700;">
+                    <td class="label-col" style="color: #059669;">Lợi nhuận thuần thực tế:</td>
+                    <td class="val-col text-right" style="color: #059669; font-size: 13.5px;">$${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                </tr>
+            </table>
+        `).show();
     }
 
     render_cost_items(items) {
+        if (!items || !items.length) {
+            $('#tcd-cost-items-tbody').html('<tr><td colspan="7" class="text-center" style="color:#64748b; padding:16px;">Chưa có dòng chi phí nào được ghi nhận cho hồ sơ này.</td></tr>');
+            return;
+        }
         let html = '';
         items.forEach(it => {
-            const diff = it.act - it.est;
+            const est = Number(it.est || 0);
+            const act = Number(it.act || 0);
+            const diff = act - est;
             const diffSign = diff > 0 ? '+' : '';
             const diffCls = diff > 0 ? 'tcd-var-positive' : (diff < 0 ? 'tcd-var-negative' : 'tcd-var-zero');
             html += `
@@ -2708,8 +2994,8 @@ class EmbeddedTradeCostDashboardController {
                     <td style="font-weight: 600; color: #0f172a;">${it.type}</td>
                     <td style="color: #475569;">${it.supplier}</td>
                     <td><code>${it.inv_no}</code></td>
-                    <td class="text-right" style="color: #64748b;">$${it.est.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td class="text-right" style="font-weight: 600; color: #0f172a;">$${it.act.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td class="text-right" style="color: #64748b;">$${est.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td class="text-right" style="font-weight: 600; color: #0f172a;">$${act.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td class="text-right ${diffCls}">${diffSign}$${diff.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td class="text-center">
                         <span class="delay-tag-ontime" style="font-size: 11px;">${it.status}</span>
@@ -2721,10 +3007,13 @@ class EmbeddedTradeCostDashboardController {
     }
 
     render_allocation_table() {
-        const c = this.caseData[this.currentCaseId] || this.caseData['IMP-2026-001'];
-        if (!c || !c.items_to_allocate) return;
+        const c = this.get_active_case_data();
+        if (!c || !c.items_to_allocate || !c.items_to_allocate.length) {
+            $('#tcd-allocation-tbody').html('<tr><td colspan="7" class="text-center" style="color:#64748b; padding:16px;">Chưa có danh mục hàng hóa (PO/PR/SO) để mô phỏng phân bổ Landed Cost.</td></tr>');
+            return;
+        }
 
-        const totalActualCost = c.actual_cost;
+        const totalActualCost = Number(c.actual_cost || 0);
         const allocated = this.calculate_allocation(c.items_to_allocate, totalActualCost, this.currentRule);
 
         let html = '';
@@ -2733,10 +3022,10 @@ class EmbeddedTradeCostDashboardController {
                 <tr>
                     <td style="font-weight: 700; color: #0284c7;">${it.item_code}</td>
                     <td style="color: #334155;">${it.name}</td>
-                    <td class="text-center" style="font-weight: 600;">${it.qty.toLocaleString()}</td>
-                    <td class="text-right">$${it.unit_price.toFixed(2)}</td>
-                    <td class="text-right" style="color: #0284c7; font-weight: 600;">+$${it.allocated_cost.toFixed(2)}</td>
-                    <td class="text-right" style="font-weight: 700; color: #059669;">$${it.landed_unit_cost.toFixed(2)}</td>
+                    <td class="text-center" style="font-weight: 600;">${Number(it.qty || 0).toLocaleString()}</td>
+                    <td class="text-right">$${Number(it.unit_price || 0).toFixed(2)}</td>
+                    <td class="text-right" style="color: #0284c7; font-weight: 600;">+$${Number(it.allocated_cost || 0).toFixed(2)}</td>
+                    <td class="text-right" style="font-weight: 700; color: #059669;">$${Number(it.landed_unit_cost || 0).toFixed(2)}</td>
                     <td class="text-center" style="color: #d97706; font-weight: 600;">+${it.pct_increase}%</td>
                 </tr>
             `;

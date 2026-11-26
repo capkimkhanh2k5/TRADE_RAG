@@ -233,7 +233,10 @@ def get_location_details(identifier: Union[str, Tuple[float, float], List[float]
     return best_loc
 
 
-def get_location_coords(identifier: Union[str, Tuple[float, float], List[float]]) -> Optional[Tuple[float, float]]:
+def get_location_coords(
+    identifier: Union[str, Tuple[float, float], List[float]],
+    _allow_geocode_fallback: bool = True,
+) -> Optional[Tuple[float, float]]:
     """
     Resolves any location identifier (ID, UN/LOCODE, IATA, alias, address string, or coords)
     into a latitude/longitude tuple: (lat, lon).
@@ -351,13 +354,14 @@ def get_location_coords(identifier: Union[str, Tuple[float, float], List[float]]
 
 
     # Fallback to geocode_location (Nominatim / online geocoding with cache)
-    try:
-        from .GEO_shipTracking import geocode_location
-        geo_pt = geocode_location(str(identifier), "")
-        if geo_pt:
-            return (float(geo_pt[0]), float(geo_pt[1]))
-    except Exception:
-        pass
+    if _allow_geocode_fallback:
+        try:
+            from .GEO_shipTracking import geocode_location
+            geo_pt = geocode_location(str(identifier), "", _from_routing=True)
+            if geo_pt:
+                return (float(geo_pt[0]), float(geo_pt[1]))
+        except Exception:
+            pass
 
     return None
 

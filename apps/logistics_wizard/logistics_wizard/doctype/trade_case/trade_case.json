@@ -71,11 +71,11 @@
    "label": "Định danh & Tổng quan Hồ sơ (Identification)"
   },
   {
-   "default": "TC-.YYYY.-.",
+   "default": "IMP-.YYYY.-.####",
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Mã Series",
-   "options": "TC-.YYYY.-.",
+   "options": "IMP-.YYYY.-.####\nEXP-.YYYY.-.####\nTC-.YYYY.-.",
    "reqd": 1
   },
   {
@@ -415,7 +415,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-02 21:00:00.000000",
+ "modified": "2026-11-24 19:26:00.000000",
  "modified_by": "Administrator",
  "module": "Logistics Wizard",
  "name": "Trade Case",
