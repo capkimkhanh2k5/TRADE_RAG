@@ -141,6 +141,7 @@ def _ensure_shipment(case_id: str, trade_type: str, carrier: str, vessel: str, m
     doc = frappe.get_doc(
         {
             "doctype": "Shipment Tracking",
+            "name": f"SHP-{case_id}",
             "trade_case": case_id,
             "flow_type": trade_type,
             "shipping_method": mode,
@@ -175,7 +176,7 @@ def seed_all_demo_scenarios() -> Dict[str, Any]:
     s1_spec = DEMO_SCENARIO_SPECS[0]
     s1_id = _get_or_create_trade_case(s1_spec, str(today + timedelta(days=5)))
     seeded_cases["scenario_1"] = s1_id
-    _ensure_shipment(s1_id, "Import", "ANA Cargo", "NH897 B777F", "Air", s1_spec["origin_port"], s1_spec["destination_port"], "Delivered", 0, f"ANA-{s1_id}")
+    _ensure_shipment(s1_id, "Import", "ANA Cargo", "NH897 B777F", "Air", s1_spec["origin_port"], s1_spec["destination_port"], "Completed", 0, f"ANA-{s1_id}")
     # Verify all mandatory docs
     for d in get_case_documents_list(s1_id):
         if d.get("status") != "N/A" and d.get("status") != "Verified":
@@ -189,10 +190,17 @@ def seed_all_demo_scenarios() -> Dict[str, Any]:
         advance_customs_workflow(c1["name"], "Declared", declaration_no=f"1061100{s1_id[-4:]}", customs_lane="Green", origin_verified=1, customs_value_verified=1, force_skip_doc_check=True)
         advance_customs_workflow(c1["name"], "Cleared")
     if not frappe.db.exists("Trade Cost Sheet", {"trade_case": s1_id}):
-        add_cost_item_to_case(s1_id, "Freight", estimated_cost=3250, actual_cost=3200, invoice_number=f"ANA-INV-{s1_id}", cost_description="Air Freight NRT-HAN", status="Verified")
-        add_cost_item_to_case(s1_id, "Insurance", estimated_cost=400, actual_cost=380, invoice_number=f"INS-{s1_id}", cost_description="Air Cargo Insurance", status="Verified")
-        frappe.db.set_value("Trade Cost Sheet", {"trade_case": s1_id}, "cost_finalization_status", "FINALIZED", update_modified=False)
+        add_cost_item_to_case(s1_id, "Freight", estimated_cost=3250, actual_cost=3200, invoice_number=f"ANA-INV-{s1_id}", cost_description="Air Freight NRT-HAN", status="Allocated")
+        add_cost_item_to_case(s1_id, "Insurance", estimated_cost=400, actual_cost=380, invoice_number=f"INS-{s1_id}", cost_description="Air Cargo Insurance", status="Allocated")
+        frappe.db.set_value("Trade Cost Sheet", {"trade_case": s1_id}, {"status": "Finalized", "cost_finalization_status": "FINALIZED"}, update_modified=False)
         frappe.db.set_value("Trade Case", s1_id, "costs_finalized", 1, update_modified=False)
+    else:
+        sheet_s1 = frappe.db.get_value("Trade Cost Sheet", {"trade_case": s1_id}, "name")
+        if sheet_s1:
+            frappe.db.sql("UPDATE `tabTrade Cost Item` SET status='Allocated' WHERE parent=%s", (sheet_s1,))
+            frappe.db.set_value("Trade Cost Sheet", sheet_s1, {"status": "Finalized", "cost_finalization_status": "FINALIZED"}, update_modified=False)
+        for ex_name in frappe.get_all("Shipment Exception", filters={"trade_case": s1_id, "rule_code": "RULE_07_COST_NOT_FINALIZED", "status": ["in", ["Open", "Investigating"]]}, pluck="name"):
+            frappe.db.set_value("Shipment Exception", ex_name, "status", "Resolved", update_modified=False)
     wh1 = schedule_warehouse_receiving(s1_id, "Kho Công nghệ cao - WH-HANOI", str(today), expected_qty=50, space_reserved=1, receiving_team="Đội Thiết bị Nhạy cảm")
     record_warehouse_inspection(wh1["name"], received_qty=50, damaged_qty=0, actual_arrival=str(today))
     evaluate_case_exceptions(s1_id, auto_create=True)
@@ -223,7 +231,7 @@ def seed_all_demo_scenarios() -> Dict[str, Any]:
     s3_spec = DEMO_SCENARIO_SPECS[2]
     s3_id = _get_or_create_trade_case(s3_spec, str(today + timedelta(days=15)))
     seeded_cases["scenario_3"] = s3_id
-    _ensure_shipment(s3_id, "Export", "ONE", "ONE APUS 014E", "Ocean", s3_spec["origin_port"], s3_spec["destination_port"], "Customs Hold", 0, f"ONEU-{s3_id}")
+    _ensure_shipment(s3_id, "Export", "ONE", "ONE APUS 014E", "Ocean", s3_spec["origin_port"], s3_spec["destination_port"], "Customs Clearance", 0, f"ONEU-{s3_id}")
     if not get_case_customs_declarations(s3_id):
         c3 = create_customs_declaration(s3_id, trade_type="Export", customs_office_code="32BD", items=[{"item_name": "Solar Panel 550W", "qty": 1250, "unit_price": 120, "import_duty_rate": 0, "vat_rate": 0}])
         propose_hs_code(c3["name"], 1, "85414300", confidence_score=97.0, legal_basis="Biểu thuế XK 2026")
@@ -242,7 +250,7 @@ def seed_all_demo_scenarios() -> Dict[str, Any]:
     s4_spec = DEMO_SCENARIO_SPECS[3]
     s4_id = _get_or_create_trade_case(s4_spec, str(today + timedelta(days=3)))
     seeded_cases["scenario_4"] = s4_id
-    _ensure_shipment(s4_id, "Import", "HMM", "HMM ALGECIRAS", "Ocean", s4_spec["origin_port"], s4_spec["destination_port"], "Delivered", 0, f"HDMU-{s4_id}")
+    _ensure_shipment(s4_id, "Import", "HMM", "HMM ALGECIRAS", "Ocean", s4_spec["origin_port"], s4_spec["destination_port"], "Completed", 0, f"HDMU-{s4_id}")
     wh4 = schedule_warehouse_receiving(s4_id, "Kho Hải Phòng - WH-HAIPHONG", str(today), expected_qty=1000, space_reserved=1, receiving_team="Đội KCS Kho A")
     record_warehouse_inspection(wh4["name"], received_qty=985, damaged_qty=10, actual_arrival=str(today))
     evaluate_case_exceptions(s4_id, auto_create=True)
