@@ -14,7 +14,7 @@ services:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
       - ./apps/logistics_wizard:/home/frappe/frappe-bench/apps/logistics_wizard
-      - ./apps/ai_service:/home/frappe/frappe-bench/apps/ai_service
+      - ./apps/ai_service:/home/frappe/frappe-bench/ai_service
     environment:
       DB_HOST: db
       DB_PORT: "3306"
@@ -93,7 +93,7 @@ services:
       - ./scripts/create-site.sh:/home/frappe/frappe-bench/create-site.sh
       - ./scripts:/home/frappe/frappe-bench/scripts:ro
       - ./apps/logistics_wizard:/home/frappe/frappe-bench/apps/logistics_wizard
-      - ./apps/ai_service:/home/frappe/frappe-bench/apps/ai_service
+      - ./apps/ai_service:/home/frappe/frappe-bench/ai_service
     depends_on:
       configurator:
         condition: service_completed_successfully
@@ -171,7 +171,7 @@ services:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
       - ./apps/logistics_wizard:/home/frappe/frappe-bench/apps/logistics_wizard
-      - ./apps/ai_service:/home/frappe/frappe-bench/apps/ai_service
+      - ./apps/ai_service:/home/frappe/frappe-bench/ai_service
     environment:
       FRAPPE_REDIS_CACHE: redis://redis-cache:6379
       FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
@@ -196,7 +196,7 @@ services:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
       - ./apps/logistics_wizard:/home/frappe/frappe-bench/apps/logistics_wizard
-      - ./apps/ai_service:/home/frappe/frappe-bench/apps/ai_service
+      - ./apps/ai_service:/home/frappe/frappe-bench/ai_service
     environment:
       FRAPPE_REDIS_CACHE: redis://redis-cache:6379
       FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
@@ -237,7 +237,7 @@ services:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
       - ./apps/logistics_wizard:/home/frappe/frappe-bench/apps/logistics_wizard
-      - ./apps/ai_service:/home/frappe/frappe-bench/apps/ai_service
+      - ./apps/ai_service:/home/frappe/frappe-bench/ai_service
     depends_on:
       create-site:
         condition: service_completed_successfully

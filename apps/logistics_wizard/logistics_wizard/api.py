@@ -3608,11 +3608,7 @@ def get_knowledge_graph(section=None, chapter=None, root_id=None, query=None, de
     Uses UnifiedGraphService with automatic fallback between Apache AGE and In-Memory JSON.
     """
     try:
-        ai_rag_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "../../ai_service/ai_rag")
-        )
-        if ai_rag_path not in sys.path:
-            sys.path.insert(0, ai_rag_path)
+        _ensure_rag_path()
 
         from rag.graph.service import get_graph_service
 
@@ -3641,11 +3637,18 @@ def get_knowledge_graph(section=None, chapter=None, root_id=None, query=None, de
 # =============================================================================
 
 def _ensure_rag_path():
-    ai_rag_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../ai_service/ai_rag")
-    )
-    if ai_rag_path not in sys.path:
-        sys.path.insert(0, ai_rag_path)
+    candidates = [
+        "/home/frappe/frappe-bench/ai_service/ai_rag",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../ai_service/ai_rag")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../ai_service/ai_rag")),
+        "/home/frappe/frappe-bench/apps/ai_service/ai_rag",
+    ]
+    for p in candidates:
+        if os.path.isdir(p):
+            if p not in sys.path:
+                sys.path.insert(0, p)
+            return p
+    return None
 
 
 @frappe.whitelist(allow_guest=True)

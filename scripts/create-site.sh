@@ -90,7 +90,7 @@ else
         echo ">>> Seeding initial procurement data (Apple Inc. Air/Ocean, Landed Cost)..."
         PROCUREMENT_SCRIPT="$BENCH_DIR/scripts/generate_procurement_data.py"
         [ ! -f "$PROCUREMENT_SCRIPT" ] && PROCUREMENT_SCRIPT="$BENCH_DIR/generate_procurement_data.py"
-        $BENCH_DIR/env/bin/python3 "$PROCUREMENT_SCRIPT" || true
+        (cd "$BENCH_DIR/sites" && $BENCH_DIR/env/bin/python3 "$PROCUREMENT_SCRIPT") || true
     fi
 fi
 
@@ -117,7 +117,7 @@ if [ "$PO_STATUS" = "EMPTY" ]; then
     echo ">>> No purchase orders found. Seeding initial procurement data..."
     PROCUREMENT_SCRIPT="$BENCH_DIR/scripts/generate_procurement_data.py"
     [ ! -f "$PROCUREMENT_SCRIPT" ] && PROCUREMENT_SCRIPT="$BENCH_DIR/generate_procurement_data.py"
-    $BENCH_DIR/env/bin/python3 "$PROCUREMENT_SCRIPT" || true
+    (cd "$BENCH_DIR/sites" && $BENCH_DIR/env/bin/python3 "$PROCUREMENT_SCRIPT") || true
 else
     echo ">>> Purchase orders status: $PO_STATUS."
 fi
@@ -126,7 +126,7 @@ fi
 echo ">>> Ensuring Trade Cases and Trade Cost Sheets are seeded..."
 TRADE_CASE_SCRIPT="$BENCH_DIR/scripts/seed_trade_cases_and_costing.py"
 if [ -f "$TRADE_CASE_SCRIPT" ]; then
-    $BENCH_DIR/env/bin/python3 "$TRADE_CASE_SCRIPT" || true
+    (cd "$BENCH_DIR/sites" && $BENCH_DIR/env/bin/python3 "$TRADE_CASE_SCRIPT") || true
 fi
 
 echo ">>> Ensuring E2E Demo Scenarios (Import/Export IMP-*/EXP-*) are seeded..."
