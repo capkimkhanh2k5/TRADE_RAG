@@ -1,0 +1,17 @@
+.git
+__pycache__
+**/__pycache__
+**/*.pyc
+backups
+archived
+test
+docs
+apps/erpnext
+apps/frappe
+apps/ai_service/ai_rag/.venv
+apps/ai_service/ai_rag/.mypy_cache
+apps/ai_service/ai_rag/.pytest_cache
+apps/ai_service/ai_rag/.ruff_cache
+apps/ai_service/ai_rag/notebooks
+apps/ai_service/ai_rag/artifacts/*
+!apps/ai_service/ai_rag/artifacts/corpus.json
