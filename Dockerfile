@@ -13,7 +13,7 @@ USER frappe
 
 # Copy custom app and AI RAG service code into the image
 COPY --chown=1000:0 apps/logistics_wizard /home/frappe/frappe-bench/apps/logistics_wizard
-COPY --chown=1000:0 apps/ai_service /home/frappe/frappe-bench/apps/ai_service
+COPY --chown=1000:0 apps/ai_service /home/frappe/frappe-bench/ai_service
 
 # Install the app + RAG DB/DOCX runtime dependencies into the Python virtual environment
 RUN cd /home/frappe/frappe-bench && \

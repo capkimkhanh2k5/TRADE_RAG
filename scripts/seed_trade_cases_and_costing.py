@@ -6,12 +6,15 @@ Populates real Trade Case and Trade Cost Sheet records linking to existing
 Purchase Orders and Shipment Tracking in the logistics.local site.
 """
 
+import os
 import frappe
 from frappe.utils import today, add_days, now
 
 def run():
     print(">>> Seeding Trade Cases and Trade Cost Sheets...")
     if not frappe.db:
+        if os.path.isdir("/home/frappe/frappe-bench/sites"):
+            os.chdir("/home/frappe/frappe-bench/sites")
         frappe.init(site="logistics.local")
         frappe.connect()
 

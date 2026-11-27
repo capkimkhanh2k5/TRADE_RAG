@@ -137,6 +137,7 @@ NOTE_RELATIONS_TO_TARIFF = {
 def ensure_ai_rag_path() -> Optional[str]:
     """Ensure `apps/ai_service/ai_rag` is on `sys.path`."""
     candidates = [
+        "/home/frappe/frappe-bench/ai_service/ai_rag",
         os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../ai_service/ai_rag")),
         os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../ai_service/ai_rag")),
         "/home/frappe/frappe-bench/apps/ai_service/ai_rag",
