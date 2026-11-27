@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"hdr_shortcuts\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Truy C\u1eadp Nhanh (Logistics Quick Access)</b></span>\",\"col\":12}},{\"id\":\"sc_ai\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Logistics AI Copilot\",\"col\":3}},{\"id\":\"sc_cost_dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trade Cost & Landed Cost Dashboard\",\"col\":3}},{\"id\":\"sc_hub\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Management Logistic Hub\",\"col\":3}},{\"id\":\"sc_cost_sheet\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trade Cost Sheet\",\"col\":3}},{\"id\":\"sc_trade_case\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trade Case\",\"col\":3}},{\"id\":\"sc_tracking\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shipment Tracking\",\"col\":3}},{\"id\":\"sc_lcv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Landed Cost Voucher\",\"col\":3}},{\"id\":\"sp_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"hdr_modules\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Ph\u00e2n H\u1ec7 Qu\u1ea3n Tr\u1ecb & Nghi\u1ec7p V\u1ee5</b></span>\",\"col\":12}},{\"id\":\"card_ai\",\"type\":\"card\",\"data\":{\"card_name\":\"AI & Financial Analytics\",\"col\":4}},{\"id\":\"card_costing\",\"type\":\"card\",\"data\":{\"card_name\":\"Costing & Landed Cost\",\"col\":4}},{\"id\":\"card_operations\",\"type\":\"card\",\"data\":{\"card_name\":\"Trade Operations & Tracking\",\"col\":4}}]",
+ "content": "[{\"id\":\"hdr_shortcuts\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Truy C\\u1eadp Nhanh (Logistics Quick Access)</b></span>\",\"col\":12}},{\"id\":\"sc_tco\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trade Case Overview\",\"col\":3}},{\"id\":\"sc_exec\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Executive Dashboard\",\"col\":3}},{\"id\":\"sc_track\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shipment Tracking Hub\",\"col\":3}},{\"id\":\"sc_cost\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trade Cost Dashboard\",\"col\":3}},{\"id\":\"sc_ai\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Logistics AI Copilot\",\"col\":3}},{\"id\":\"sc_rag_dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"RAG Performance Dashboard\",\"col\":3}},{\"id\":\"sc_rag_kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"RAG Knowledge Base\",\"col\":3}},{\"id\":\"sc_graph\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"S\\u01a1 \\u0110\\u1ed3 Tri Th\\u1ee9c (Graph Explorer)\",\"col\":3}},{\"id\":\"sp_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"hdr_modules\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Ph\\u00e2n H\\u1ec7 Qu\\u1ea3n Tr\\u1ecb & Nghi\\u1ec7p V\\u1ee5</b></span>\",\"col\":12}},{\"id\":\"card_ops\",\"type\":\"card\",\"data\":{\"card_name\":\"Trade Operations & Tracking\",\"col\":6}},{\"id\":\"card_costing\",\"type\":\"card\",\"data\":{\"card_name\":\"Costing & Financial Analytics\",\"col\":6}},{\"id\":\"card_ai\",\"type\":\"card\",\"data\":{\"card_name\":\"AI & Knowledge Management\",\"col\":6}},{\"id\":\"card_reports\",\"type\":\"card\",\"data\":{\"card_name\":\"Reporting & Audit (Module 7)\",\"col\":6}}]",
  "creation": "2026-10-16 00:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -194,7 +194,7 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Sơ Đồ Tri Thức (Graph Explorer)",
+   "label": "S\u01a1 \u0110\u1ed3 Tri Th\u1ee9c (Graph Explorer)",
    "link_count": 0,
    "link_to": "rag-knowledge-base",
    "link_type": "Page",
@@ -325,7 +325,7 @@
    "type": "Page"
   },
   {
-   "label": "Sơ Đồ Tri Thức (Graph Explorer)",
+   "label": "S\u01a1 \u0110\u1ed3 Tri Th\u1ee9c (Graph Explorer)",
    "link_to": "rag-knowledge-base",
    "type": "Page"
   }

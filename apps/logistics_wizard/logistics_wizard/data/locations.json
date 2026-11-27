@@ -103,7 +103,9 @@
         "la port",
         "port of la",
         "san pedro port",
-        "uslax"
+        "uslax",
+        "port of los angeles (uslax)",
+        "los angeles"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #52160 / UN/CEFACT UN/LOCODE USLAX",
@@ -180,7 +182,10 @@
         "cảng tân cảng cát lái",
         "cat lai port (vnsgn)",
         "vnsgn seaport",
-        "cat lai port - ck"
+        "cat lai port - ck",
+        "cat lai port, hcmc (vnhcm)",
+        "vnhcm",
+        "cat lai port, hcmc"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #57370 / UN/CEFACT UN/LOCODE VNCLI",
@@ -216,7 +221,9 @@
         "dinh vu port",
         "vnhph",
         "hai phong port - ck",
-        "hai phong port (vnhph)"
+        "hai phong port (vnhph)",
+        "dinh vu port, hai phong (vnhph)",
+        "lach huyen"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #57240 / UN/CEFACT UN/LOCODE VNHPH",
@@ -255,7 +262,8 @@
         "vvts",
         "tan son nhat airport (sgn)",
         "vnsgn airport",
-        "tan son nhat airport - ck"
+        "tan son nhat airport - ck",
+        "tan son nhat (sgn)"
       ],
       "reference": {
         "authority": "OurAirports ID 26724 / CAAV AIP VVTS",
@@ -293,7 +301,10 @@
         "han",
         "vvnb",
         "noi bai airport - ck",
-        "noi bai airport (han)"
+        "noi bai airport (han)",
+        "noi bai international airport (han)",
+        "hanoi noi bai (han)",
+        "hanoi"
       ],
       "reference": {
         "authority": "OurAirports ID 26710 / CAAV AIP VVNB",
@@ -718,7 +729,10 @@
         "tien sa port",
         "tien sa terminal",
         "da nang port",
-        "vndad"
+        "vndad",
+        "da nang tien sa (vndad)",
+        "tien sa port, da nang (vndad)",
+        "tien sa"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #57420 / UN/LOCODE VNDAD",
@@ -933,7 +947,10 @@
         "japan",
         "nhật bản",
         "jptyo",
-        "tyo"
+        "tyo",
+        "tokyo narita (nrt)",
+        "nrt",
+        "tokyo narita int airport"
       ],
       "reference": {
         "authority": "Tokyo Metropolitan Government Port & Harbor Bureau / UN/LOCODE JPTYO",
@@ -968,7 +985,10 @@
         "thượng hải",
         "port of shanghai",
         "cnsha",
-        "sha"
+        "sha",
+        "shanghai port (cnshg)",
+        "shanghai port (cnsha)",
+        "cnshg"
       ],
       "reference": {
         "authority": "Shanghai International Port Group (SIPG) / UN/LOCODE CNSHA",
@@ -1337,7 +1357,9 @@
         "cảng laem chabang",
         "thlch",
         "laem chabang roro terminal",
-        "chonburi port"
+        "chonburi port",
+        "laem chabang (thlch)",
+        "laem chabang port (thlch)"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #57675 / Port Authority of Thailand (PAT) / UN/LOCODE THLCH",
@@ -1375,7 +1397,10 @@
         "vtbs",
         "sân bay suvarnabhumi",
         "bangkok airport",
-        "suvarnabhumi"
+        "suvarnabhumi",
+        "bangkok port (thbkk)",
+        "suvarnabhumi airport (bkk)",
+        "thbkk"
       ],
       "reference": {
         "authority": "OurAirports ID 26555 / CAAT AIP Thailand VTBS / IATA BKK",
@@ -1450,7 +1475,9 @@
         "cảng diêm điền",
         "cnytn",
         "shenzhen port",
-        "yantian"
+        "yantian",
+        "shenzhen port (cnszx)",
+        "cnszx"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #57795 / UN/CEFACT UN/LOCODE CNYTN / YICT Authority",
@@ -1489,7 +1516,9 @@
         "zgsz",
         "sân bay bảo an thâm quyến",
         "shenzhen airport",
-        "baoan airport"
+        "baoan airport",
+        "shenzhen baoan (szx)",
+        "shenzhen bao'an airport (szx)"
       ],
       "reference": {
         "authority": "OurAirports ID 27150 / CAAC AIP ZGSZ / IATA SZX",
@@ -1677,7 +1706,8 @@
         "northport klang",
         "westport klang",
         "cảng port klang",
-        "klang port"
+        "klang port",
+        "port klang (mypkg)"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #50460 / Port Klang Authority (PKA) / UN/LOCODE MYPKG",
@@ -1715,7 +1745,8 @@
         "nbct",
         "pelabuhan pulau pinang",
         "cảng penang",
-        "butterworth port"
+        "butterworth port",
+        "penang port (mypen)"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #50440 / Penang Port Commission / UN/LOCODE MYPEN",
@@ -1864,7 +1895,8 @@
         "cảng yokohama",
         "daikoku pier",
         "minami honmoku terminal",
-        "yokohama roro terminal"
+        "yokohama roro terminal",
+        "yokohama port (jpyok)"
       ],
       "reference": {
         "authority": "NGA World Port Index Pub. 150 #50940 / City of Yokohama Port & Harbor Bureau / UN/LOCODE JPYOK",
@@ -1944,7 +1976,8 @@
         "hiep phuoc roro terminal",
         "hiep phuoc / spct",
         "hiep phuoc",
-        "spct port"
+        "spct port",
+        "hiep phuoc port (vnhcm)"
       ],
       "reference": {
         "authority": "Vietnam Seaports Association (VPA) / SPCT Nautical Coordinates 10°38'15\"N 106°45'51\"E / UN/LOCODE VNHCM",
@@ -2140,6 +2173,33 @@
         ],
         "precision_meters": 10
       }
+    },
+    "busan_port": {
+      "id": "busan_port",
+      "name": "Busan Port (KRPUS)",
+      "name_vi": "Cảng Busan (Hàn Quốc)",
+      "type": "seaport",
+      "country_code": "KR",
+      "country_name": "South Korea",
+      "subdivision": "BS",
+      "coordinates": {
+        "latitude": 35.1028,
+        "longitude": 129.0403
+      },
+      "codes": {
+        "un_locode": "KRPUS",
+        "iata": null,
+        "icao": null,
+        "wpi_id": 60420,
+        "ourairports_id": null
+      },
+      "aliases": [
+        "busan port (krpus)",
+        "busan port",
+        "krpus",
+        "port of busan",
+        "busan"
+      ]
     }
   }
 }

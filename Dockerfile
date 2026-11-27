@@ -2,20 +2,22 @@ FROM frappe/erpnext:v16
 
 USER root
 
-# Copy the site-creation script and demo data generator
+# Copy the site-creation script and demo data generators
 COPY scripts/create-site.sh /home/frappe/frappe-bench/create-site.sh
 COPY scripts/generate_procurement_data.py /home/frappe/frappe-bench/generate_procurement_data.py
+COPY scripts/seed_trade_cases_and_costing.py /home/frappe/frappe-bench/scripts/seed_trade_cases_and_costing.py
 RUN chmod +x /home/frappe/frappe-bench/create-site.sh && \
-    chown 1000:0 /home/frappe/frappe-bench/create-site.sh /home/frappe/frappe-bench/generate_procurement_data.py
+    chown 1000:0 /home/frappe/frappe-bench/create-site.sh /home/frappe/frappe-bench/generate_procurement_data.py /home/frappe/frappe-bench/scripts/seed_trade_cases_and_costing.py
 
 USER frappe
 
-# Copy the custom app source code into the image
+# Copy custom app and AI RAG service code into the image
 COPY --chown=1000:0 apps/logistics_wizard /home/frappe/frappe-bench/apps/logistics_wizard
+COPY --chown=1000:0 apps/ai_service /home/frappe/frappe-bench/apps/ai_service
 
-# Install the app into the Python virtual environment
+# Install the app + RAG DB/DOCX runtime dependencies into the Python virtual environment
 RUN cd /home/frappe/frappe-bench && \
-    ./env/bin/pip install -q -U -e ./apps/logistics_wizard
+    ./env/bin/pip install -q -U -e ./apps/logistics_wizard "psycopg[binary]" pgvector numpy python-docx
 
 # Register app in apps.txt (use printf to ensure a newline before appending)
 RUN printf "\nlogistics_wizard\n" >> /home/frappe/frappe-bench/sites/apps.txt

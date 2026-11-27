@@ -102,7 +102,8 @@ class TestPhase6ExecutiveReportsAndSeed(unittest.TestCase):
             self.assertIn(metric_key, data["metrics"])
 
     def test_demo_scenario_specs_cover_import_export_and_4_scenarios(self):
-        self.assertEqual(len(DEMO_SCENARIO_SPECS), 4)
+        self.assertEqual(len(DEMO_SCENARIO_SPECS), 5)
+        self.assertIn("SCENARIO_5_HEALTHY_EXPORT_AIR_COMPLETE", {s["key"] for s in DEMO_SCENARIO_SPECS})
         trade_types = {s["trade_type"] for s in DEMO_SCENARIO_SPECS}
         healths = {s["expected_health"] for s in DEMO_SCENARIO_SPECS}
         self.assertEqual(trade_types, {"Import", "Export"})

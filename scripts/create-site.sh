@@ -39,12 +39,18 @@ try:
     app_path = frappe.get_app_path('logistics_wizard')
     items_to_sync = [
         ('page', 'shipment_tracking_hub', 'shipment_tracking_hub.json'),
-        ('page', 'managementlogistic', 'managementlogistic.json'),
+        ('page', 'executive_dashboard', 'executive_dashboard.json'),
         ('page', 'trade_case_overview', 'trade_case_overview.json'),
-        ('page', 'logistics_ai_chatbot', 'logistics_ai_chatbot.json'),
+        ('page', 'logistics_ai_copilot', 'logistics_ai_copilot.json'),
         ('page', 'trade_cost_dashboard', 'trade_cost_dashboard.json'),
         ('page', 'rag_admin_center', 'rag_admin_center.json'),
         ('page', 'rag_knowledge_base', 'rag_knowledge_base.json'),
+        ('report', 'shipment_delay_and_carrier_performance', 'shipment_delay_and_carrier_performance.json'),
+        ('report', 'trade_document_readiness_audit', 'trade_document_readiness_audit.json'),
+        ('report', 'customs_clearance_sla_performance', 'customs_clearance_sla_performance.json'),
+        ('report', 'import_landed_cost_variance', 'import_landed_cost_variance.json'),
+        ('report', 'export_profitability_and_logistics_cost', 'export_profitability_and_logistics_cost.json'),
+        ('report', 'trade_exception_and_action_audit', 'trade_exception_and_action_audit.json'),
         ('workspace', 'logistics_wizard', 'logistics_wizard.json')
     ]
     for sub in items_to_sync:
@@ -123,6 +129,9 @@ if [ -f "$TRADE_CASE_SCRIPT" ]; then
     $BENCH_DIR/env/bin/python3 "$TRADE_CASE_SCRIPT" || true
 fi
 
+echo ">>> Ensuring E2E Demo Scenarios (Import/Export IMP-*/EXP-*) are seeded..."
+bench --site "$SITE_NAME" execute logistics_wizard.seed_demo_scenarios.seed_all_demo_scenarios || true
+
 echo ">>> Building JS/CSS assets for logistics_wizard..."
 bench build --app logistics_wizard
 
@@ -146,7 +155,7 @@ cp -rf "$DIST_SRC/." "$DIST_DEST/"
 echo "    Copied all public/ files to $DIST_DEST/"
 
 # ─── Merge assets.json into volume ────────────────────────────────────────
-echo ">>> Merging assets.json into volume..."
+echo ">>> Merging assets.json & assets-rtl.json into volume..."
 python3 - << 'PYEOF'
 import json, os, shutil
 
@@ -163,7 +172,16 @@ if os.path.exists(dest_json):
 if os.path.exists(src_json):
     with open(src_json) as f:
         src = json.load(f)
-    dest.update(src)
+    for k, v in src.items():
+        if "logistics_wizard" not in v:
+            dest[k] = v
+
+# Purge stale logistics_wizard entries whose target hash file does not exist on disk
+for k in list(dest.keys()):
+    if "logistics_wizard" in dest[k]:
+        target_rel = dest[k].lstrip("/")
+        if not os.path.exists(os.path.join(bench_dir, "sites", target_rel)):
+            del dest[k]
 
 dest_rtl = {}
 if os.path.exists(dest_rtlj):
@@ -172,37 +190,44 @@ if os.path.exists(dest_rtlj):
     for k in list(dest_rtl.keys()):
         if "logistics_wizard" in dest_rtl[k]:
             del dest_rtl[k]
-    with open(dest_rtlj, "w") as f:
-        json.dump(dest_rtl, f, indent=4)
 
-# Dynamic scan of newly built dist folder
+# Dynamic scan of newly built dist folder (js, css -> assets.json; css-rtl -> assets-rtl.json)
 dist_dir = f"{bench_dir}/sites/assets/logistics_wizard/dist"
-for subdir in ["js", "css"]:
+for subdir in ["js", "css", "css-rtl"]:
     subpath = os.path.join(dist_dir, subdir)
     if not os.path.isdir(subpath):
         continue
-    for f in os.listdir(subpath):
-        if f.endswith(".map"):
-            continue
+    # Pick the newest hashed bundle file per base_name in case older hashes exist
+    candidates = sorted(
+        (f for f in os.listdir(subpath) if not f.endswith(".map") and len(f.rsplit(".", 2)) == 3),
+        key=lambda f: os.path.getmtime(os.path.join(subpath, f)),
+    )
+    for f in candidates:
         parts = f.rsplit(".", 2)
-        if len(parts) == 3:
-            base_name = parts[0] + "." + parts[2]
-            url_path = f"/assets/logistics_wizard/dist/{subdir}/{f}"
+        base_name = parts[0] + "." + parts[2]
+        url_path = f"/assets/logistics_wizard/dist/{subdir}/{f}"
+        if subdir == "css-rtl":
+            dest_rtl["rtl_" + base_name] = url_path
+        else:
             dest[base_name] = url_path
-            # Also create an unhashed copy as fallback
-            unhashed_file = os.path.join(subpath, base_name)
-            if not os.path.exists(unhashed_file):
-                try:
-                    shutil.copyfile(os.path.join(subpath, f), unhashed_file)
-                except Exception:
-                    pass
+        # Also create an unhashed copy as fallback
+        unhashed_file = os.path.join(path := subpath, base_name)
+        try:
+            shutil.copyfile(os.path.join(path, f), unhashed_file)
+        except Exception:
+            pass
 
 with open(dest_json, "w") as f:
     json.dump(dest, f, indent=4)
+with open(dest_rtlj, "w") as f:
+    json.dump(dest_rtl, f, indent=4)
 
-lw = [(k,v) for k,v in dest.items() if "logistics_wizard" in v]
-for k,v in lw:
-    print(f"  {k} -> {v}")
+lw = [(k, v) for k, v in dest.items() if "logistics_wizard" in v]
+for k, v in lw:
+    print(f"  assets.json: {k} -> {v}")
+lw_rtl = [(k, v) for k, v in dest_rtl.items() if "logistics_wizard" in v]
+for k, v in lw_rtl:
+    print(f"  assets-rtl.json: {k} -> {v}")
 PYEOF
 
 echo ">>> Clearing cache (including shared assets_json)..."
