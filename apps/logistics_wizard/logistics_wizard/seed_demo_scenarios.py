@@ -352,7 +352,8 @@ def _ensure_shipment(
         if so_name and not doc.sales_order:
             doc.sales_order = so_name
             changed = True
-        if not (getattr(doc, "transit_route", None) or []):
+        if not (getattr(doc, "transit_route", None) and len(doc.transit_route) >= 5):
+            doc.set("transit_route", [])
             for idx_m, (m_code, act, loc, coords, day_off) in enumerate(milestones):
                 d_str = str(today + timedelta(days=day_off))
                 doc.append("transit_route", {
@@ -613,22 +614,33 @@ def seed_all_demo_scenarios() -> Dict[str, Any]:
         frappe.db.sql("UPDATE `tabTrade Cost Item` SET status='Allocated' WHERE parent=%s", (sheet_s5,))
         frappe.db.set_value("Trade Cost Sheet", sheet_s5, {"status": "Finalized", "cost_finalization_status": "FINALIZED"}, update_modified=False)
         frappe.db.set_value("Trade Case", s5_id, "costs_finalized", 1, update_modified=False)
-    # Create Delivery Note & Sales Invoice for Scenario 5 Export workflow (force_skip_stock check via Stock Entry or fallback Draft/Submit)
+    # Create Delivery Note & Sales Invoice for Scenario 5 Export workflow
+    from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note, make_sales_invoice
     if not frappe.db.exists("Delivery Note Item", {"against_sales_order": s5_so, "docstatus": ["!=", 2]}):
         try:
-            from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note, make_sales_invoice
             dn5 = make_delivery_note(s5_so)
             dn5.posting_date = str(today)
             if hasattr(dn5, "shipment_tracking"):
                 dn5.shipment_tracking = s5_shp
             dn5.insert(ignore_permissions=True)
             frappe.db.set_value("Shipment Tracking", s5_shp, "delivery_note", dn5.name, update_modified=False)
+        except Exception as dn_err:
+            frappe.log_error(f"Scenario 5 DN error: {dn_err}")
+    if not frappe.db.exists("Sales Invoice Item", {"sales_order": s5_so, "docstatus": ["!=", 2]}):
+        try:
             si5 = make_sales_invoice(s5_so)
             si5.posting_date = str(today)
+            usd_rec = frappe.db.get_value(
+                "Account",
+                {"company": s5_spec.get("company") or company, "account_type": "Receivable", "account_currency": "USD"},
+                "name",
+            )
+            if usd_rec:
+                si5.debit_to = usd_rec
             si5.insert(ignore_permissions=True)
             si5.submit()
-        except Exception:
-            pass
+        except Exception as si_err:
+            frappe.log_error(f"Scenario 5 SI error: {si_err}")
     evaluate_case_exceptions(s5_id, auto_create=True)
     for ex_name in frappe.get_all("Shipment Exception", filters={"trade_case": s5_id, "status": ["in", ["Open", "Investigating"]]}, pluck="name"):
         frappe.db.set_value("Shipment Exception", ex_name, "status", "Resolved", update_modified=False)

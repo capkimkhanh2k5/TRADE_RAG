@@ -235,21 +235,25 @@ def extract_sales_documents(
                 dn_names = frappe.db.get_all(
                     "Delivery Note Item",
                     filters={"against_sales_order": so_name, "docstatus": 1},
-                    fields=["distinct parent as name"]
+                    fields=["parent"],
+                    distinct=True,
+                    pluck="parent",
                 )
-                for row in dn_names:
-                    if frappe.db.exists("Delivery Note", row.name):
-                        extracted["delivery_notes"].append(frappe.get_doc("Delivery Note", row.name))
+                for dn_name in dn_names:
+                    if frappe.db.exists("Delivery Note", dn_name):
+                        extracted["delivery_notes"].append(frappe.get_doc("Delivery Note", dn_name))
 
                 # Find Sales Invoices against Sales Order
                 si_names = frappe.db.get_all(
                     "Sales Invoice Item",
                     filters={"sales_order": so_name, "docstatus": 1},
-                    fields=["distinct parent as name"]
+                    fields=["parent"],
+                    distinct=True,
+                    pluck="parent",
                 )
-                for row in si_names:
-                    if frappe.db.exists("Sales Invoice", row.name):
-                        extracted["sales_invoices"].append(frappe.get_doc("Sales Invoice", row.name))
+                for si_name in si_names:
+                    if frappe.db.exists("Sales Invoice", si_name):
+                        extracted["sales_invoices"].append(frappe.get_doc("Sales Invoice", si_name))
         except Exception:
             pass
 
@@ -270,6 +274,22 @@ def derive_export_revenue(
     3. Fallback to cost_sheet.export_revenue or direct revenue field.
     4. Default 0.0.
     """
+    sheet_currency = str(target_currency or _get_field(cost_sheet, "currency") or "").upper()
+    sheet_fx = flt(_get_field(cost_sheet, "conversion_rate") or 1.0)
+
+    def _doc_amount_in_sheet_currency(doc: Any) -> float:
+        doc_curr = str(_get_field(doc, "currency") or "").upper()
+        net_tot = _get_field(doc, "net_total") or _get_field(doc, "grand_total") or _get_field(doc, "amount")
+        # If Trade Cost Sheet operates directly in the transaction currency (e.g. USD with fx=1.0),
+        # keep transaction net_total instead of company-base VND base_net_total.
+        if sheet_currency and doc_curr == sheet_currency and abs(sheet_fx - 1.0) < 1e-6 and net_tot is not None:
+            return flt(net_tot)
+        amt = _get_field(doc, "base_net_total")
+        if amt is None:
+            rate = _get_field(doc, "conversion_rate") or 1.0
+            return flt(net_tot or 0.0) * flt(rate)
+        return flt(amt)
+
     # 1. Sales Invoices
     sis = sales_docs.get("sales_invoices", [])
     if sis:
@@ -279,15 +299,7 @@ def derive_export_revenue(
             if _get_field(si, "docstatus") == 2:  # Cancelled
                 continue
             is_return = flt(_get_field(si, "is_return", 0)) == 1
-
-            # Determine base net total
-            amt = _get_field(si, "base_net_total")
-            if amt is None:
-                net_tot = _get_field(si, "net_total") or _get_field(si, "grand_total") or _get_field(si, "amount") or 0.0
-                rate = _get_field(si, "conversion_rate") or 1.0
-                amt = flt(net_tot) * flt(rate)
-            else:
-                amt = flt(amt)
+            amt = _doc_amount_in_sheet_currency(si)
 
             if is_return:
                 total_rev -= amt
@@ -306,13 +318,7 @@ def derive_export_revenue(
         for so in sos:
             if _get_field(so, "docstatus") == 2:
                 continue
-            amt = _get_field(so, "base_net_total")
-            if amt is None:
-                net_tot = _get_field(so, "net_total") or _get_field(so, "grand_total") or _get_field(so, "amount") or 0.0
-                rate = _get_field(so, "conversion_rate") or 1.0
-                amt = flt(net_tot) * flt(rate)
-            else:
-                amt = flt(amt)
+            amt = _doc_amount_in_sheet_currency(so)
             total_rev += amt
             has_valid_so = True
 
