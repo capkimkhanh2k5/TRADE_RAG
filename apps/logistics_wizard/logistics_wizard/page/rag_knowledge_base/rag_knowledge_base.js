@@ -25,7 +25,7 @@ class RagAdminCenterController {
             filterIndexStatus: 'all',
             filterRetrieval: 'all',
             filterLegalValidity: 'all',
-            selectedDocId: 'doc-tt85',
+            selectedDocId: '',
             activeDrawerTab: 'chunks',
             drawerChunkFilterStatus: 'all',
             drawerChunkSearch: '',
@@ -36,11 +36,16 @@ class RagAdminCenterController {
             timeSeriesPeriod: 'day'
         };
 
-        this.init_mock_data();
+        this.documents = [];
+        this.corpusDocuments = [];
+        this.stagedDocuments = [];
+        this.lastDashboardData = null;
+        if (typeof frappe === 'undefined' || !frappe.call) {
+            this.init_mock_data();
+        }
         this.bind_events();
-        this.fetch_staged_documents();
         this.fetch_dashboard_metrics();
-        this.switch_nav_tab('dashboard');
+        this.switch_nav_tab('knowledge');
         
         if (typeof window !== 'undefined' && window.initLogisticsAIWidget) {
             window.initLogisticsAIWidget();
@@ -306,6 +311,56 @@ class RagAdminCenterController {
         };
     }
 
+    merge_documents() {
+        const byKey = new Map();
+        (this.corpusDocuments || []).forEach(doc => {
+            byKey.set(doc.id, doc);
+        });
+        (this.stagedDocuments || []).forEach(doc => {
+            byKey.set(doc.id, doc);
+        });
+        this.documents = Array.from(byKey.values());
+        if (this.documents.length > 0 && !this.documents.find(d => d.id === this.state.selectedDocId)) {
+            this.state.selectedDocId = this.documents[0].id;
+        }
+        this.update_tab_counts();
+        this.render_documents_table();
+    }
+
+    _map_staged_doc(doc) {
+        let agency = 'Bộ Tài chính';
+        if (doc.document_no) {
+            if (doc.document_no.includes('BTTTT')) agency = 'Bộ Thông tin & Truyền thông';
+            else if (doc.document_no.includes('BGTVT')) agency = 'Bộ Giao thông Vận tải';
+            else if (doc.document_no.includes('NĐ-CP') || doc.document_no.includes('QĐ-TTg')) agency = 'Chính phủ';
+        }
+        const isCommitted = doc.status === 'COMMITTED';
+        const isApproved = doc.status === 'APPROVED';
+        const isProcessing = doc.status === 'COMMITTING';
+        const indexStatus = isCommitted ? 'ready' : (isProcessing ? 'processing' : (isApproved ? 'approved' : 'staging'));
+        return {
+            id: doc.id,
+            title: doc.document_no || doc.filename,
+            sub_title: doc.filename,
+            type: doc.document_type === 'HS_NOMENCLATURE' ? 'hs' : 'legal',
+            agency: agency,
+            version: '2026',
+            release_date: (doc.effective_from || doc.created_at || '2026').slice(0, 10),
+            effective_date: (doc.effective_from || '2026-08-15').slice(0, 10),
+            legal_validity: 'valid',
+            legal_validity_label: 'Còn hiệu lực',
+            index_status: indexStatus,
+            staged_status: doc.status,
+            is_staged: true,
+            chunks_count: doc.total_chunks || 0,
+            approved_count: doc.approved_chunks || 0,
+            excluded_count: doc.excluded_chunks || 0,
+            retrieval_active: isCommitted,
+            priority: 'P0',
+            chunks: []
+        };
+    }
+
     fetch_staged_documents() {
         const self = this;
         if (typeof frappe === 'undefined' || !frappe.call) return;
@@ -315,56 +370,22 @@ class RagAdminCenterController {
             args: { limit: 100 },
             callback: (r) => {
                 if (r && r.message && r.message.success && Array.isArray(r.message.data)) {
-                    self.staged_raw_docs = r.message.data;
-                    const stagedDocs = r.message.data.map(doc => {
-                        let agency = 'Bộ Tài chính';
-                        if (doc.document_no) {
-                            if (doc.document_no.includes('BTTTT')) agency = 'Bộ Thông tin & Truyền thông';
-                            else if (doc.document_no.includes('BGTVT')) agency = 'Bộ Giao thông Vận tải';
-                            else if (doc.document_no.includes('NĐ-CP') || doc.document_no.includes('QĐ-TTg')) agency = 'Chính phủ';
-                        }
-                        const isCommitted = doc.status === 'COMMITTED';
-                        const isApproved = doc.status === 'APPROVED';
-                        const isProcessing = doc.status === 'COMMITTING';
-                        const indexStatus = isCommitted ? 'ready' : (isProcessing ? 'processing' : (isApproved ? 'approved' : 'staging'));
-
-                        return {
-                            id: doc.id,
-                            title: doc.document_no || doc.filename,
-                            sub_title: doc.filename,
-                            type: doc.document_type === 'HS_NOMENCLATURE' ? 'hs' : 'legal',
-                            agency: agency,
-                            version: '2026',
-                            release_date: (doc.effective_from || doc.created_at || '2026').slice(0, 10),
-                            effective_date: (doc.effective_from || '2026-08-15').slice(0, 10),
-                            legal_validity: 'valid',
-                            legal_validity_label: 'Còn hiệu lực',
-                            index_status: indexStatus,
-                            staged_status: doc.status,
-                            is_staged: true,
-                            chunks_count: doc.total_chunks || 0,
-                            approved_count: doc.approved_chunks || 0,
-                            excluded_count: doc.excluded_chunks || 0,
-                            retrieval_active: isCommitted,
-                            priority: 'P0',
-                            chunks: []
-                        };
-                    });
-
-                    if (stagedDocs && stagedDocs.length > 0) {
-                        self.documents = stagedDocs;
-                        if (!self.documents.find(d => d.id === self.state.selectedDocId)) {
-                            self.state.selectedDocId = stagedDocs[0].id;
-                        }
-                    }
-                    self.update_tab_counts();
-                    self.render_documents_table();
+                    const seen = new Set();
+                    self.stagedDocuments = r.message.data
+                        .filter(d => d.document_no && !String(d.document_no).startsWith('TEST-'))
+                        .filter(d => {
+                            const key = d.document_no || d.filename;
+                            if (seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                        })
+                        .map(d => self._map_staged_doc(d));
+                    self.merge_documents();
                 }
             }
         });
     }
 
-    
     fetch_dashboard_metrics() {
         const self = this;
         if (typeof frappe === 'undefined' || !frappe.call) return;
@@ -378,16 +399,64 @@ class RagAdminCenterController {
             callback: (r) => {
                 if (r && r.message && r.message.success && r.message.data) {
                     const data = r.message.data;
+                    self.lastDashboardData = data;
                     const kpi = data.kpi || {};
 
-                    self.$root.find('#kpi-total-queries').text((kpi.total_queries || 12450).toLocaleString('vi-VN'));
-                    self.$root.find('#kpi-completed-queries').text((kpi.completed_queries || 11820).toLocaleString('vi-VN'));
-                    self.$root.find('#kpi-missing-queries').text((kpi.missing_queries || 420).toLocaleString('vi-VN'));
-                    self.$root.find('#kpi-error-queries').text((kpi.error_queries || 210).toLocaleString('vi-VN'));
+                    const totalQ = Number(kpi.total_queries ?? 0);
+                    const compQ = Number(kpi.completed_queries ?? 0);
+                    const missQ = Number(kpi.missing_queries ?? 0);
+                    const errQ = Number(kpi.error_queries ?? 0);
+                    const readyDocs = Number(kpi.ready_docs ?? ((data.corpus_docs_count || 0) + (data.committed_docs_count || 0)));
+                    const activeChunks = Number(kpi.ready_chunks ?? data.active_chunks_count ?? data.live_chunks_count ?? 0);
+                    const compPct = totalQ > 0 ? ((compQ / totalQ) * 100).toFixed(1) : '100.0';
+                    const missPct = totalQ > 0 ? ((missQ / totalQ) * 100).toFixed(1) : '0.0';
+                    const errPct = totalQ > 0 ? ((errQ / totalQ) * 100).toFixed(1) : '0.0';
+
+                    self.$root.find('#kpi-total-queries').text(totalQ.toLocaleString('vi-VN'));
+                    self.$root.find('#kpi-completed-queries').text(compQ.toLocaleString('vi-VN'));
+                    self.$root.find('#kpi-missing-queries').text(missQ.toLocaleString('vi-VN'));
+                    self.$root.find('#kpi-error-queries').text(errQ.toLocaleString('vi-VN'));
                     self.$root.find('#kpi-avg-latency').text(kpi.avg_latency || '142ms');
-                    self.$root.find('#kpi-ready-docs').text((data.committed_docs_count || data.staged_docs_count || 21).toLocaleString('vi-VN'));
-                    self.$root.find('.rag-kpi-card.kpi-knowledge .rag-kpi-sub span:first-child').text((data.live_chunks_count || 157354).toLocaleString('vi-VN'));
-                    self.$root.find('#donut-center-total').text((kpi.total_queries || 12450).toLocaleString('vi-VN'));
+                    self.$root.find('#kpi-ready-docs').text(readyDocs.toLocaleString('vi-VN'));
+                    self.$root.find('.rag-kpi-card.kpi-knowledge .rag-kpi-sub span:first-child').text(activeChunks.toLocaleString('vi-VN'));
+                    self.$root.find('.rag-kpi-card.kpi-total .rag-kpi-sub').html(
+                        `<i class="fa fa-database"></i> Snapshot: ${frappe.utils.escape_html((data.active_snapshot || '').slice(0, 8))} • ${(data.cache_entries_count || 0).toLocaleString('vi-VN')} cache`
+                    );
+                    self.$root.find('.rag-kpi-card.kpi-success .rag-kpi-sub span:first-child').text(`${compPct}%`);
+                    self.$root.find('.rag-kpi-card.kpi-missing .rag-kpi-sub span:first-child').text(`${missPct}%`);
+                    self.$root.find('.rag-kpi-card.kpi-error .rag-kpi-sub span:first-child').text(`${errPct}%`);
+                    self.$root.find('.rag-kpi-card.kpi-latency .rag-kpi-sub span:first-child').text(
+                        `Graph: ${(data.graph_nodes_count || 0).toLocaleString('vi-VN')} nodes / ${(data.graph_edges_count || 0).toLocaleString('vi-VN')} edges`
+                    );
+                    self.$root.find('#donut-center-total').text(totalQ.toLocaleString('vi-VN'));
+
+                    const $legends = self.$root.find('.rag-donut-legends .rag-legend-item .count');
+                    if ($legends.length >= 3) {
+                        $legends.eq(0).text(`${compQ.toLocaleString('vi-VN')} (${compPct}%)`);
+                        $legends.eq(1).text(`${missQ.toLocaleString('vi-VN')} (${missPct}%)`);
+                        $legends.eq(2).text(`${errQ.toLocaleString('vi-VN')} (${errPct}%)`);
+                    }
+
+                    const procDocs = Number(data.approved_docs_count || 0) + Number(data.pending_docs_count || 0);
+                    const totalH = Math.max(1, readyDocs + procDocs);
+                    const readyPct = ((readyDocs / totalH) * 100).toFixed(1);
+                    const procPct = ((procDocs / totalH) * 100).toFixed(1);
+                    self.$root.find('.rag-health-seg-ready').css('width', `${readyPct}%`).attr('title', `${readyDocs} Sẵn sàng`);
+                    self.$root.find('.rag-health-seg-processing').css('width', `${procPct}%`).attr('title', `${procDocs} Staging`);
+                    self.$root.find('.rag-health-seg-error').css('width', '0%').attr('title', '0 Lỗi');
+                    self.$root.find('#health-stat-ready').text(`${readyDocs} tài liệu`);
+                    self.$root.find('#health-stat-processing').text(`${procDocs} tài liệu`);
+                    self.$root.find('#health-stat-error').text('0 tài liệu');
+                    self.$root.find('#health-stat-disabled').text('0 tài liệu');
+
+                    if (Array.isArray(data.corpus_documents)) {
+                        self.corpusDocuments = data.corpus_documents;
+                    }
+                    if (Array.isArray(data.recent_documents)) {
+                        self.stagedDocuments = data.recent_documents.map(d => self._map_staged_doc(d));
+                    }
+                    self.merge_documents();
+                    self.render_charts();
                 }
             }
         });
@@ -499,9 +568,15 @@ class RagAdminCenterController {
 
         // 8. Document Row Click -> Open Drawer
         this.$root.on('click', '.rag-clickable-row', function (e) {
-            if ($(e.target).closest('.rag-toggle-switch, .rag-row-action-btn, input[type="checkbox"]').length) {
+            if ($(e.target).closest('.rag-toggle-switch, .rag-row-action-btn, .btn-open-doc-drawer, input[type="checkbox"]').length) {
                 return;
             }
+            const docId = $(this).data('doc-id');
+            self.open_drawer(docId);
+        });
+
+        this.$root.on('click', '.btn-open-doc-drawer', function (e) {
+            e.stopPropagation();
             const docId = $(this).data('doc-id');
             self.open_drawer(docId);
         });
@@ -704,20 +779,21 @@ class RagAdminCenterController {
     }
 
     update_kpi_metrics() {
+        if (typeof frappe !== 'undefined' && frappe.call) {
+            this.fetch_dashboard_metrics();
+            return;
+        }
         const factor = this.state.timeRange === '24h' ? 0.15 : (this.state.timeRange === '30d' ? 3.8 : 1.0);
         const domainMult = this.state.domain === 'hs' ? 0.58 : (this.state.domain === 'legal' ? 0.42 : 1.0);
-        
         const total = Math.round(12450 * factor * domainMult);
         const completed = Math.round(total * 0.949);
         const missing = Math.round(total * 0.034);
         const error = total - completed - missing;
-
         this.$root.find('#kpi-total-queries').text(total.toLocaleString('vi-VN'));
         this.$root.find('#kpi-completed-queries').text(completed.toLocaleString('vi-VN'));
         this.$root.find('#kpi-missing-queries').text(missing.toLocaleString('vi-VN'));
         this.$root.find('#kpi-error-queries').text(error.toLocaleString('vi-VN'));
         this.$root.find('#donut-center-total').text(total.toLocaleString('vi-VN'));
-
         this.render_charts();
     }
 
@@ -731,7 +807,19 @@ class RagAdminCenterController {
         if (!$container.length) return;
         $container.empty();
 
-        const data = this.timeSeriesData[this.state.timeSeriesPeriod];
+        let data = this.timeSeriesData ? this.timeSeriesData[this.state.timeSeriesPeriod] : null;
+        if (this.lastDashboardData && Array.isArray(this.lastDashboardData.corpus_documents) && this.lastDashboardData.corpus_documents.length) {
+            const docs = this.lastDashboardData.corpus_documents.slice(0, 7);
+            data = {
+                labels: docs.map(d => (d.dataset || d.title).toUpperCase().slice(0, 10)),
+                hs: docs.map(d => d.type === 'hs' ? Number(d.chunks_count || 0) : 0),
+                legal: docs.map(d => d.type === 'legal' ? Number(d.chunks_count || 0) : 0)
+            };
+        }
+        if (!data || !data.labels || !data.labels.length) {
+            $container.html('<div style="padding:40px;text-align:center;color:#64748b;">Đang tải biểu đồ từ PostgreSQL...</div>');
+            return;
+        }
         const labels = data.labels;
         const hsData = data.hs;
         const legalData = data.legal;
@@ -743,9 +831,9 @@ class RagAdminCenterController {
         const graphW = width - padding.left - padding.right;
         const graphH = height - padding.top - padding.bottom;
 
-        const maxVal = Math.max(...hsData, ...legalData) * 1.15;
+        const maxVal = Math.max(10, ...hsData, ...legalData) * 1.15;
 
-        const getX = (i) => padding.left + (i / (labels.length - 1)) * graphW;
+        const getX = (i) => padding.left + (i / Math.max(1, labels.length - 1)) * graphW;
         const getY = (val) => padding.top + graphH - (val / maxVal) * graphH;
 
         let pathHs = `M ${getX(0)} ${getY(hsData[0])}`;
@@ -813,9 +901,20 @@ class RagAdminCenterController {
         const radius = (size - strokeW) / 2;
         const circumference = 2 * Math.PI * radius;
 
-        const compLen = circumference * 0.949;
-        const missLen = circumference * 0.034;
-        const errLen = circumference * 0.017;
+        const kpi = (this.lastDashboardData && this.lastDashboardData.kpi) || null;
+        let compRatio = 0.949;
+        let missRatio = 0.034;
+        let errRatio = 0.017;
+        if (kpi) {
+            const total = Math.max(1, Number(kpi.total_queries || 0));
+            compRatio = Number(kpi.completed_queries || 0) / total;
+            missRatio = Number(kpi.missing_queries || 0) / total;
+            errRatio = Math.max(0, 1.0 - compRatio - missRatio);
+        }
+
+        const compLen = circumference * compRatio;
+        const missLen = circumference * missRatio;
+        const errLen = circumference * errRatio;
 
         const offsetComp = 0;
         const offsetMiss = -compLen;
@@ -953,8 +1052,8 @@ class RagAdminCenterController {
 
             // Action button
             const actionBtn = (doc.is_staged && doc.staged_status !== 'COMMITTED')
-                ? `<button class="btn btn-xs btn-primary" style="background:#0284c7; color:#fff; border:none; padding:4px 10px; border-radius:4px; font-weight:600; font-size:11px;" title="Duyệt Chunks Vùng đệm" onclick="event.stopPropagation(); frappe.pages['rag-admin-center'].controller.open_drawer('${doc.id}');"><i class="fa fa-check-square-o"></i> Duyệt Chunks</button>`
-                : `<button class="rag-row-action-btn" title="Xem chi tiết" onclick="event.stopPropagation(); frappe.pages['rag-admin-center'].controller.open_drawer('${doc.id}');"><i class="fa fa-eye"></i></button>`;
+                ? `<button class="btn btn-xs btn-primary btn-open-doc-drawer" data-doc-id="${doc.id}" style="background:#0284c7; color:#fff; border:none; padding:4px 10px; border-radius:4px; font-weight:600; font-size:11px;" title="Duyệt Chunks Vùng đệm"><i class="fa fa-check-square-o"></i> Duyệt Chunks</button>`
+                : `<button class="rag-row-action-btn btn-open-doc-drawer" data-doc-id="${doc.id}" title="Xem chi tiết"><i class="fa fa-eye"></i></button>`;
 
             const tr = `
                 <tr class="rag-clickable-row" data-doc-id="${doc.id}">
@@ -1026,6 +1125,29 @@ class RagAdminCenterController {
         } else {
             $btnApproveAll.hide();
             $btnPublish.hide();
+            if (doc.is_corpus && !doc.corpus_chunks && typeof frappe !== 'undefined' && frappe.call) {
+                const self = this;
+                frappe.call({
+                    method: 'logistics_wizard.api.get_rag_corpus_chunks',
+                    args: { dataset: doc.dataset, limit: 40 },
+                    callback: (r) => {
+                        if (r && r.message && r.message.success && Array.isArray(r.message.data)) {
+                            doc.corpus_chunks = r.message.data;
+                            doc.chunks = r.message.data.map(ch => ({
+                                id: ch.code || ch.id,
+                                path: [ch.section, ch.chapter ? ('Chương ' + ch.chapter) : '', ch.heading ? ('Nhóm ' + ch.heading) : ''].filter(Boolean).join(' > ') || doc.title,
+                                tokens: Math.max(20, Math.round(String(ch.source_text || '').length / 4)),
+                                priority: doc.priority || 'P0',
+                                text: ch.source_text || '',
+                                meta: { dataset: ch.dataset, chunk_type: ch.chunk_type, code: ch.code }
+                            }));
+                            if (self.state.selectedDocId === docId) {
+                                self.render_drawer_body();
+                            }
+                        }
+                    }
+                });
+            }
         }
 
         this.render_drawer_body();

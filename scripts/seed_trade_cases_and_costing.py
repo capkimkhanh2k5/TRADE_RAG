@@ -426,6 +426,13 @@ def run():
 
     for tc_data in trade_cases_spec:
         tc_name = tc_data["name"]
+        # Auto-resolve Purchase Order from linked Shipment Tracking when omitted (e.g. TC-2026-00010 -> ST-IMP-2026-001 -> IMP-2026-001)
+        st_link = tc_data.get("shipment_tracking")
+        if (not tc_data.get("purchase_order") or not frappe.db.exists("Purchase Order", tc_data["purchase_order"])) and st_link and frappe.db.exists("Shipment Tracking", st_link):
+            resolved_po = frappe.db.get_value("Shipment Tracking", st_link, "purchase_order")
+            if resolved_po and frappe.db.exists("Purchase Order", resolved_po):
+                tc_data["purchase_order"] = resolved_po
+
         if frappe.db.exists("Trade Case", tc_name):
             doc = frappe.get_doc("Trade Case", tc_name)
             doc.update(tc_data)
@@ -436,9 +443,9 @@ def run():
             doc.insert(ignore_permissions=True)
             print(f"  [Created] Trade Case {tc_name}")
 
-        # Also link child shipment reference
-        st_link = tc_data.get("shipment_tracking")
+        # Ensure Shipment Tracking points back to Trade Case & link child shipment reference
         if st_link and frappe.db.exists("Shipment Tracking", st_link):
+            frappe.db.set_value("Shipment Tracking", st_link, "trade_case", tc_name, update_modified=False)
             st_data = frappe.db.get_value("Shipment Tracking", st_link, ["tracking_number", "carrier", "status", "container_id", "delay_days"], as_dict=True) or {}
             doc.set("shipments", [])
             doc.append("shipments", {
@@ -453,47 +460,250 @@ def run():
             })
             doc.save(ignore_permissions=True)
 
-        # Create corresponding Trade Cost Sheet
+        # Create/Update corresponding Trade Cost Sheet WITH real child Trade Cost Item lines
         tcs_name = f"TCS-{tc_name.split('-', 1)[1]}"
-        est_val = tc_data["estimated_landed_cost"]
-        act_val = tc_data["actual_landed_cost"]
-        var_pct = tc_data["cost_variance_pct"]
-        is_finalized = tc_data["costs_finalized"]
+        po_val = float(tc_data["order_amount"] or 0.0)
+        est_log = round(max(1500.0, float(tc_data["estimated_landed_cost"]) - po_val), 2)
+        act_log = round(max(1500.0, float(tc_data["actual_landed_cost"]) - po_val), 2)
+        is_finalized = bool(tc_data["costs_finalized"])
+        item_status = "Allocated" if is_finalized else "Verified"
 
-        tcs_data = {
-            "name": tcs_name,
+        if frappe.db.exists("Trade Cost Sheet", tcs_name):
+            tcs_doc = frappe.get_doc("Trade Cost Sheet", tcs_name)
+        else:
+            tcs_doc = frappe.get_doc({"doctype": "Trade Cost Sheet", "name": tcs_name})
+
+        tcs_doc.update({
             "trade_case": tc_name,
             "case_title": tc_data["case_title"],
             "trade_type": tc_data["trade_type"],
-            "status": "Finalized" if is_finalized else "Draft",
+            "status": "Finalized" if is_finalized else "Verified",
             "company": company,
             "posting_date": today(),
             "currency": "USD",
             "conversion_rate": 1.0,
             "allocation_rule": "By Value",
-            "total_purchase_value": tc_data["order_amount"],
-            "total_estimated_cost": est_val,
-            "total_actual_cost": act_val,
-            "variance_amount": act_val - est_val,
-            "variance_pct": var_pct,
-            "actual_landed_cost": act_val,
-            "costs_verified": 1 if is_finalized else 0,
-            "costs_allocated": 1 if is_finalized else 0,
-            "cost_finalization_status": "Finalized" if is_finalized else "Draft"
-        }
+            "total_purchase_value": po_val,
+        })
 
-        if frappe.db.exists("Trade Cost Sheet", tcs_name):
-            tcs_doc = frappe.get_doc("Trade Cost Sheet", tcs_name)
-            tcs_doc.update(tcs_data)
-            tcs_doc.save(ignore_permissions=True)
-            print(f"  [Updated] Trade Cost Sheet {tcs_name}")
-        else:
-            tcs_doc = frappe.get_doc({"doctype": "Trade Cost Sheet", **tcs_data})
+        # Ensure real Trade Cost Item lines exist so TradeCostSheet.validate() computes live totals
+        existing_items = getattr(tcs_doc, "cost_items", None) or []
+        if not existing_items:
+            tcs_doc.set("cost_items", [
+                {
+                    "cost_type": "Freight",
+                    "cost_description": f"International Freight ({tc_data['mode']} {tc_data['origin_port']} -> {tc_data['destination_port']})",
+                    "invoice_number": f"FRT-{tc_name}",
+                    "currency": "USD",
+                    "exchange_rate": 1.0,
+                    "estimated_cost": round(est_log * 0.55, 2),
+                    "actual_cost": round(act_log * 0.55, 2),
+                    "status": item_status,
+                },
+                {
+                    "cost_type": "Duty",
+                    "cost_description": "Customs Import Duty & Tariff",
+                    "invoice_number": f"DTY-{tc_name}",
+                    "currency": "USD",
+                    "exchange_rate": 1.0,
+                    "estimated_cost": round(est_log * 0.25, 2),
+                    "actual_cost": round(act_log * 0.25, 2),
+                    "status": item_status,
+                },
+                {
+                    "cost_type": "Port",
+                    "cost_description": "THC & Terminal Handling Charges",
+                    "invoice_number": f"PRT-{tc_name}",
+                    "currency": "USD",
+                    "exchange_rate": 1.0,
+                    "estimated_cost": round(est_log * 0.12, 2),
+                    "actual_cost": round(act_log * 0.12, 2),
+                    "status": item_status,
+                },
+                {
+                    "cost_type": "Insurance",
+                    "cost_description": "Cargo Marine/Air Insurance Premium",
+                    "invoice_number": f"INS-{tc_name}",
+                    "currency": "USD",
+                    "exchange_rate": 1.0,
+                    "estimated_cost": round(est_log - round(est_log * 0.55, 2) - round(est_log * 0.25, 2) - round(est_log * 0.12, 2), 2),
+                    "actual_cost": round(act_log - round(act_log * 0.55, 2) - round(act_log * 0.25, 2) - round(act_log * 0.12, 2), 2),
+                    "status": item_status,
+                },
+            ])
+        if tcs_doc.is_new():
             tcs_doc.insert(ignore_permissions=True)
-            print(f"  [Created] Trade Cost Sheet {tcs_name}")
+            print(f"  [Created] Trade Cost Sheet {tcs_name} ({len(tcs_doc.cost_items)} items)")
+        else:
+            tcs_doc.save(ignore_permissions=True)
+            print(f"  [Updated] Trade Cost Sheet {tcs_name} ({len(tcs_doc.cost_items)} items)")
+
+        # Seed Module 3 (Trade Document), Module 4 (Customs Declaration), Module 6 & Warehouse/LCV
+        _seed_modules_for_tc_case(tc_data, tcs_doc, company)
 
     frappe.db.commit()
-    print(">>> ✅ All 10 Trade Cases and 10 Trade Cost Sheets successfully seeded!")
+    print(">>> ✅ All 10 Trade Cases, Documents, Customs, Cost Items, Warehouse & LCV successfully seeded!")
+
+
+def _seed_modules_for_tc_case(tc_data: dict, tcs_doc, company: str) -> None:
+    """Populate real Modules 3, 4, 6 & ERPNext PR/LCV records for each TC-2026-* case idempotently."""
+    tc_name = tc_data["name"]
+    try:
+        from logistics_wizard.document_engine.api import (
+            generate_case_document_checklist,
+            get_case_documents_list,
+            upload_trade_document_version,
+            verify_trade_document,
+        )
+        from logistics_wizard.customs_engine.api import (
+            advance_customs_workflow,
+            approve_hs_code,
+            create_customs_declaration,
+            get_case_customs_declarations,
+            propose_hs_code,
+        )
+        from logistics_wizard.warehouse_engine.api import (
+            record_warehouse_inspection,
+            schedule_warehouse_receiving,
+        )
+        from logistics_wizard.exception_engine.api import (
+            create_action_item,
+            evaluate_case_exceptions,
+            get_case_action_items,
+        )
+        from logistics_wizard.costing_engine.api import allocate_and_sync_lcv
+    except Exception as exc:
+        print(f"  [WARN] Engine import skipped for {tc_name}: {exc}")
+        return
+
+    # 1. Module 3: Document Checklist & Verification
+    generate_case_document_checklist(tc_name)
+    docs = get_case_documents_list(tc_name)
+    is_done = tc_data["status"] == "Completed"
+    missing_co = tc_name in ("TC-2026-00005", "TC-2026-00010")
+    early_ready_codes = {"DOC-CI", "DOC-PL", "DOC-BL", "DOC-AWB", "DOC-INS"}
+    for d in docs:
+        code = d.get("document_code")
+        st = d.get("status")
+        if is_done:
+            if st not in ("N/A", "Verified"):
+                u = upload_trade_document_version(tc_name, code, f"/files/{tc_name}_{code}.pdf")
+                verify_trade_document(u["name"], action="verify", notes=f"Verified for completed case {tc_name}")
+        elif missing_co and code == "DOC-CO":
+            if st != "Missing":
+                verify_trade_document(d["name"], action="mark_missing", notes="C/O Form bản gốc đang chuyển phát nhanh")
+        elif code in early_ready_codes and st not in ("N/A", "Verified"):
+            u = upload_trade_document_version(tc_name, code, f"/files/{tc_name}_{code}.pdf")
+            verify_trade_document(u["name"], action="verify", notes=f"Pre-arrival verified for {tc_name}")
+
+    # 2. Module 4: Customs Declaration grounded on real PO items
+    hs_by_supplier = {
+        "Apple Inc.": ("85171300", "Apple Electronics / Smartphone Assembly"),
+        "Pandora Jewelry Ltd": ("71131190", "Sterling Silver 925 Pandora Jewelry"),
+        "Yamaha Motor Co., Ltd.": ("87115090", "Yamaha CBU Motorcycle >800cc"),
+        "Toyota Motor Thailand": ("87042129", "Toyota Hilux / Camry CBU Vehicle"),
+        "Honda Vietnam/Thailand Co.": ("87115090", "Honda CBU Motorcycle & Parts"),
+        "Dell Technologies": ("84713020", "Dell Commercial Laptops & Monitors"),
+        "Lenovo Group": ("84713020", "Lenovo ThinkPad & Workstation Systems"),
+    }
+    if not get_case_customs_declarations(tc_name):
+        hs_code, item_desc = hs_by_supplier.get(tc_data.get("supplier", ""), ("84713020", "Commercial Goods"))
+        po_name = tc_data.get("purchase_order")
+        cdec_items = []
+        if po_name and frappe.db.exists("Purchase Order", po_name):
+            po_doc = frappe.get_doc("Purchase Order", po_name)
+            for it in (po_doc.items or [])[:2]:
+                cdec_items.append({
+                    "item_code": it.item_code,
+                    "item_name": it.item_name or it.item_code,
+                    "qty": float(it.qty or 1),
+                    "unit_price": float(it.rate or 100),
+                    "import_duty_rate": 5.0,
+                    "vat_rate": 10.0,
+                })
+        if not cdec_items:
+            cdec_items = [{
+                "item_name": item_desc,
+                "qty": 100,
+                "unit_price": max(100.0, float(tc_data["order_amount"]) / 100.0),
+                "import_duty_rate": 5.0,
+                "vat_rate": 10.0,
+            }]
+        cdec = create_customs_declaration(
+            tc_name,
+            customs_office_code="02CI",
+            co_form="Form D (ATIGA)" if tc_data.get("origin_country") == "Thailand" else "Form E (ACFTA)",
+            items=cdec_items,
+        )
+        if cdec.get("success"):
+            for i in range(1, len(cdec_items) + 1):
+                propose_hs_code(cdec["name"], i, hs_code, confidence_score=94.5, legal_basis=f"GIR 1 & TT31/2022 ({tc_data.get('supplier')})")
+                approve_hs_code(cdec["name"], i, action="approve", notes="Chuyên viên đã đối chiếu invoice & C/O")
+            advance_customs_workflow(cdec["name"], "Ready", force_skip_doc_check=True)
+            if is_done:
+                advance_customs_workflow(
+                    cdec["name"],
+                    "Declared",
+                    declaration_no=tc_data.get("customs_declaration_no"),
+                    customs_lane=tc_data.get("customs_lane") or "Green",
+                    origin_verified=1,
+                    customs_value_verified=1,
+                    force_skip_doc_check=True,
+                )
+                advance_customs_workflow(cdec["name"], "Cleared")
+
+    # 3. Completed Case (TC-2026-00001): Real Warehouse Receipt, ERPNext Purchase Receipt & Landed Cost Voucher
+    if is_done:
+        wh = schedule_warehouse_receiving(tc_name, "Cat Lai Port - CK", today(), expected_qty=500, space_reserved=1, receiving_team="Đội Nhập Khẩu Cát Lái")
+        if wh.get("name"):
+            record_warehouse_inspection(wh["name"], received_qty=500, damaged_qty=0, actual_arrival=today())
+        po_name = tc_data.get("purchase_order")
+        if po_name and frappe.db.exists("Purchase Order", po_name):
+            existing_pr = frappe.db.get_value("Purchase Receipt Item", {"purchase_order": po_name, "docstatus": ["!=", 2]}, "parent")
+            if not existing_pr:
+                try:
+                    from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
+                    pr_doc = make_purchase_receipt(po_name)
+                    pr_doc.posting_date = today()
+                    pr_doc.insert(ignore_permissions=True)
+                    pr_doc.submit()
+                    existing_pr = pr_doc.name
+                    print(f"    ✓ Created & Submitted ERPNext PR: {existing_pr} for {tc_name}")
+                except Exception as exc:
+                    print(f"    [WARN] Could not auto-create PR for {tc_name}: {exc}")
+            if existing_pr and not getattr(tcs_doc, "landed_cost_voucher", None):
+                try:
+                    tcs_doc.reload()
+                    tcs_doc.set("document_links", [{
+                        "document_type": "Purchase Receipt",
+                        "document_name": existing_pr,
+                        "document_status": "Submitted",
+                    }])
+                    tcs_doc.save(ignore_permissions=True)
+                    lcv_res = allocate_and_sync_lcv(tcs_doc.name, auto_submit=True)
+                    if lcv_res.get("success") or lcv_res.get("lcv_name"):
+                        frappe.db.set_value("Trade Cost Sheet", tcs_doc.name, {"status": "Finalized", "cost_finalization_status": "FINALIZED"}, update_modified=False)
+                        frappe.db.set_value("Trade Case", tc_name, "costs_finalized", 1, update_modified=False)
+                        print(f"    ✓ Synced ERPNext Landed Cost Voucher: {lcv_res.get('lcv_name')} for {tc_name}")
+                except Exception as exc:
+                    print(f"    [WARN] LCV sync skipped for {tc_name}: {exc}")
+
+    # 4. Module 6: Link legacy Exceptions & Run Exception Rules
+    if tc_name == "TC-2026-00005" and frappe.db.exists("Shipment Exception", "EXC-TOYOTA-2026-005-01"):
+        frappe.db.set_value("Shipment Exception", "EXC-TOYOTA-2026-005-01", "trade_case", tc_name, update_modified=False)
+    if tc_name == "TC-2026-00010" and frappe.db.exists("Shipment Exception", "EXC-IMP-2026-001-01"):
+        frappe.db.set_value("Shipment Exception", "EXC-IMP-2026-001-01", "trade_case", tc_name, update_modified=False)
+
+    evaluate_case_exceptions(tc_name, auto_create=True)
+    if tc_data.get("overall_health") == "Attention" and not get_case_action_items(tc_name):
+        create_action_item(
+            tc_name,
+            f"Theo dõi ETA mới & bổ sung C/O bản gốc cho hồ sơ {tc_name}",
+            department="Logistics",
+            owner_name="Administrator",
+            priority="High",
+            due_date=add_days(today(), 2),
+        )
 
 if __name__ == "__main__":
     run()
