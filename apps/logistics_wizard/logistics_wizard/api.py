@@ -4205,6 +4205,9 @@ def ask_ai_copilot(query=None, case_id=None, drawer=False):
                 first_cid = next(iter(cost_res["cases"].keys()))
                 resolved_case_id = first_cid
                 cost_data = cost_res["cases"][first_cid]
+            elif not cost_data and cost_res.get("success") and (cost_res.get("has_cost_sheet") or cost_res.get("cost_items")):
+                resolved_case_id = cost_res.get("case_id") or resolved_case_id
+                cost_data = cost_res
 
             if cost_data:
                 est = float(cost_data.get("estimated_cost") or 0)
